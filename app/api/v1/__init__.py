@@ -12,12 +12,17 @@ from app.api.v1 import (
     admin_dashboard,
     admin_routes,
     auth,
+    device_configs,
+    devices,
     operation_logs,
     permission_cache,
     permissions,
+    query_templates,
+    regions,
     roles,
     user_relations,
     users,
+    vendors,
 )
 
 # 创建 API v1 路由器
@@ -33,6 +38,11 @@ api_router.include_router(user_relations.router, tags=["用户关系管理"])
 api_router.include_router(admin_dashboard.router, tags=["后台管理仪表板"])
 api_router.include_router(admin_routes.admin_router, tags=["管理员专用"])
 api_router.include_router(permission_cache.router, tags=["权限缓存管理"])
+api_router.include_router(device_configs.router, tags=["设备配置管理"])
+api_router.include_router(devices.router, tags=["设备管理"])
+api_router.include_router(regions.router, tags=["基地管理"])
+api_router.include_router(vendors.router, tags=["厂商管理"])
+api_router.include_router(query_templates.router, tags=["查询模板管理"])
 
 # 保持向后兼容
 v1_router = api_router
