@@ -85,6 +85,51 @@ async def delete_vendor(
     return SuccessResponse(message="厂商删除成功")
 
 
+# ===== 批量操作功能 =====
+
+
+@router.post("/batch", response_model=list[VendorResponse], summary="批量创建厂商")
+async def batch_create_vendors(
+    vendors_data: list[VendorCreateRequest],
+    service: VendorService = Depends(get_vendor_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_CREATE)),
+):
+    """批量创建厂商"""
+    results = []
+    for vendor_data in vendors_data:
+        result = await service.create_vendor(vendor_data, operation_context=operation_context)
+        results.append(result)
+    return results
+
+
+@router.put("/batch", response_model=list[VendorResponse], summary="批量更新厂商")
+async def batch_update_vendors(
+    updates_data: list[dict],  # [{"id": UUID, "data": VendorUpdateRequest}]
+    service: VendorService = Depends(get_vendor_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_UPDATE)),
+):
+    """批量更新厂商"""
+    results = []
+    for update_item in updates_data:
+        vendor_id = update_item["id"]
+        vendor_data = VendorUpdateRequest(**update_item["data"])
+        result = await service.update_vendor(vendor_id, vendor_data, operation_context=operation_context)
+        results.append(result)
+    return results
+
+
+@router.delete("/batch", response_model=SuccessResponse, summary="批量删除厂商")
+async def batch_delete_vendors(
+    vendor_ids: list[UUID],
+    service: VendorService = Depends(get_vendor_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_DELETE)),
+):
+    """批量删除厂商"""
+    for vendor_id in vendor_ids:
+        await service.delete_vendor(vendor_id, operation_context=operation_context)
+    return SuccessResponse(message=f"成功删除 {len(vendor_ids)} 个厂商")
+
+
 @router.get("/code/{vendor_code}", response_model=VendorDetailResponse, summary="根据代码获取厂商")
 async def get_vendor_by_code(
     vendor_code: str,

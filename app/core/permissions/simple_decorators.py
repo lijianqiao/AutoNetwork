@@ -447,7 +447,9 @@ class Permissions:
     VENDOR_COMMAND_ACCESS = "vendor_command:access"
 
     # 查询历史管理
+    QUERY_HISTORY_CREATE = "query_history:create"
     QUERY_HISTORY_READ = "query_history:read"
+    QUERY_HISTORY_UPDATE = "query_history:update"
     QUERY_HISTORY_DELETE = "query_history:delete"
     QUERY_HISTORY_ACCESS = "query_history:access"
     QUERY_HISTORY_CLEANUP = "query_history:cleanup"

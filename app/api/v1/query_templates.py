@@ -83,3 +83,48 @@ async def delete_query_template(
     """删除查询模板"""
     await service.delete(template_id, operation_context)
     return SuccessResponse(message="查询模板删除成功")
+
+
+# ===== 批量操作功能 =====
+
+
+@router.post("/batch", response_model=list[QueryTemplateResponse], summary="批量创建查询模板")
+async def batch_create_query_templates(
+    templates_data: list[QueryTemplateCreateRequest],
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_CREATE)),
+):
+    """批量创建查询模板"""
+    results = []
+    for template_data in templates_data:
+        result = await service.create(operation_context, **template_data.model_dump())
+        results.append(result)
+    return results
+
+
+@router.put("/batch", response_model=list[QueryTemplateResponse], summary="批量更新查询模板")
+async def batch_update_query_templates(
+    updates_data: list[dict],  # [{"id": UUID, "data": QueryTemplateUpdateRequest}]
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_UPDATE)),
+):
+    """批量更新查询模板"""
+    results = []
+    for update_item in updates_data:
+        template_id = update_item["id"]
+        template_data = QueryTemplateUpdateRequest(**update_item["data"])
+        result = await service.update(template_id, operation_context, **template_data.model_dump(exclude_none=True))
+        results.append(result)
+    return results
+
+
+@router.delete("/batch", response_model=SuccessResponse, summary="批量删除查询模板")
+async def batch_delete_query_templates(
+    template_ids: list[UUID],
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_DELETE)),
+):
+    """批量删除查询模板"""
+    for template_id in template_ids:
+        await service.delete(template_id, operation_context)
+    return SuccessResponse(message=f"成功删除 {len(template_ids)} 个查询模板")
