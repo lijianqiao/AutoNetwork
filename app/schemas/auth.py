@@ -2,7 +2,7 @@
 @Author: li
 @Email: lijianqiao2906@live.com
 @FileName: auth.py
-@DateTime: 2025/01/01
+@DateTime: 2025/07/23
 @Docs: 认证相关的Pydantic模型
 """
 

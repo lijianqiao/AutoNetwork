@@ -2,7 +2,7 @@
 @Author: li
 @Email: lijianqiao2906@live.com
 @FileName: permission.py
-@DateTime: 2025/01/01
+@DateTime: 2025/07/23
 @Docs: 权限管理相关的Pydantic模型
 """
 

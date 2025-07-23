@@ -2,7 +2,7 @@
 @Author: li
 @Email: lijianqiao2906@live.com
 @FileName: discovery.py
-@DateTime: 2025/01/01
+@DateTime: 2025/07/23
 @Docs: 权限自动发现器（简化版）
 """
 
