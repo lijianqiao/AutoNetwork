@@ -189,3 +189,71 @@ class VendorService(BaseService[Vendor]):
             vendor_data.command_count = await self.vendor_command_dao.count(vendor_id=vendor.id)
             vendor_responses.append(vendor_data)
         return vendor_responses
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("vendor")
+    async def batch_create_vendors(
+        self, vendors_data: list[VendorCreateRequest], operation_context: OperationContext
+    ) -> list[VendorResponse]:
+        """批量创建厂商"""
+        # 转换为字典列表
+        data_list = [vendor_data.model_dump() for vendor_data in vendors_data]
+
+        # 批量验证厂商代码唯一性
+        vendor_codes = [data.get("vendor_code") for data in data_list if data.get("vendor_code")]
+        existing_codes = []
+        for code in vendor_codes:
+            if await self.dao.exists(vendor_code=code):
+                existing_codes.append(code)
+
+        if existing_codes:
+            raise BusinessException(f"以下厂商代码已存在: {', '.join(existing_codes)}")
+
+        # 使用BaseService的批量创建方法
+        created_vendors = await self.bulk_create(data_list)
+        return [VendorResponse.model_validate(vendor) for vendor in created_vendors]
+
+    @log_update_with_context("vendor")
+    async def batch_update_vendors(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[VendorResponse]:
+        """批量更新厂商"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有厂商是否存在
+        existing_vendors = await self.get_by_ids(update_ids)
+        existing_ids = {str(vendor.id) for vendor in existing_vendors}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下厂商不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            update_data["id"] = update_item["id"]
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 返回更新后的数据
+        updated_vendors = await self.get_by_ids(update_ids)
+        return [VendorResponse.model_validate(vendor) for vendor in updated_vendors]
+
+    @log_delete_with_context("vendor")
+    async def batch_delete_vendors(self, vendor_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除厂商"""
+        # 检查是否有设备关联
+        for vendor_id in vendor_ids:
+            device_count = await self.device_dao.count(vendor_id=vendor_id)
+            if device_count > 0:
+                vendor = await self.dao.get_by_id(vendor_id)
+                vendor_name = vendor.vendor_name if vendor else str(vendor_id)
+                raise BusinessException(f"厂商 '{vendor_name}' 下还有 {device_count} 台设备，无法删除")
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(vendor_ids, operation_context)

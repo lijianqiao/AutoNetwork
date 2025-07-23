@@ -243,6 +243,31 @@ async def batch_backup_device_configs(
     )
 
 
+# ===== 批量操作功能 =====
+
+
+@router.post("/batch", response_model=list[DeviceConfigResponse], summary="批量创建配置快照")
+async def batch_create_device_configs(
+    configs_data: list[dict],  # [{"device_id": UUID, "config_type": str, "config_content": str, ...}]
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_CREATE)),
+):
+    """批量创建设备配置快照"""
+    created_configs = await service.batch_create_configs(configs_data, operation_context)
+    return [DeviceConfigResponse.model_validate(config) for config in created_configs]
+
+
+@router.put("/batch", response_model=list[DeviceConfigResponse], summary="批量更新配置快照")
+async def batch_update_device_configs(
+    updates_data: list[dict],  # [{"id": UUID, **update_fields}]
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_UPDATE)),
+):
+    """批量更新设备配置快照"""
+    updated_configs = await service.batch_update_configs(updates_data, operation_context)
+    return [DeviceConfigResponse.model_validate(config) for config in updated_configs]
+
+
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除配置快照")
 async def batch_delete_device_configs(
     config_ids: list[UUID],
@@ -250,8 +275,8 @@ async def batch_delete_device_configs(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_DELETE)),
 ):
     """批量删除配置快照"""
-    result = await service.batch_delete_configs(config_ids, operation_context)
-    return SuccessResponse(message=f"批量删除完成，成功: {result['deleted_count']}, 失败: {result['failed_count']}")
+    deleted_count = await service.batch_delete_configs(config_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 个配置快照")
 
 
 # ===== 配置清理功能 =====

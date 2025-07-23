@@ -95,11 +95,7 @@ async def batch_create_query_templates(
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_CREATE)),
 ):
     """批量创建查询模板"""
-    results = []
-    for template_data in templates_data:
-        result = await service.create(operation_context, **template_data.model_dump())
-        results.append(result)
-    return results
+    return await service.batch_create_templates(templates_data, operation_context)
 
 
 @router.put("/batch", response_model=list[QueryTemplateResponse], summary="批量更新查询模板")
@@ -109,13 +105,15 @@ async def batch_update_query_templates(
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_UPDATE)),
 ):
     """批量更新查询模板"""
-    results = []
+    # 将数据格式转换为服务层期望的格式
+    formatted_updates = []
     for update_item in updates_data:
         template_id = update_item["id"]
-        template_data = QueryTemplateUpdateRequest(**update_item["data"])
-        result = await service.update(template_id, operation_context, **template_data.model_dump(exclude_none=True))
-        results.append(result)
-    return results
+        template_data = update_item["data"]
+        formatted_update = {"id": template_id, **template_data}
+        formatted_updates.append(formatted_update)
+
+    return await service.batch_update_templates(formatted_updates, operation_context)
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除查询模板")
@@ -125,6 +123,5 @@ async def batch_delete_query_templates(
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_DELETE)),
 ):
     """批量删除查询模板"""
-    for template_id in template_ids:
-        await service.delete(template_id, operation_context)
-    return SuccessResponse(message=f"成功删除 {len(template_ids)} 个查询模板")
+    deleted_count = await service.batch_delete_templates(template_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 个查询模板")

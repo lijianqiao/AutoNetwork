@@ -1,20 +1,6 @@
 """
 @Author: li
-from app.schemas.network_query import (
-    AvailableQueryTemplate,
-    CustomCommandQueryRequest,
-    CustomCommandResult,
-    InterfaceStatusQueryRequest,
-    InterfaceStatusResult,
-    MacQueryRequest,
-    MacQueryResult,
-    NetworkQueryByIPRequest,
-    NetworkQueryRequest,
-    NetworkQueryResponse,
-    NetworkQueryResult,
-    NetworkQueryTemplateListRequest,
-    NetworkQueryTemplateListResponse,
-)ao2906@live.com
+@Email: lijianqiao2906@live.com
 @FileName: network_query.py
 @DateTime: 2025/07/23
 @Docs: 网络查询服务层 - 使用操作上下文依赖注入

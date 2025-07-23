@@ -23,6 +23,7 @@ from app.api.v1 import (
     roles,
     user_relations,
     users,
+    vendor_commands,
     vendors,
 )
 
@@ -43,6 +44,7 @@ api_router.include_router(device_configs.router, tags=["设备配置管理"])
 api_router.include_router(devices.router, tags=["设备管理"])
 api_router.include_router(regions.router, tags=["基地管理"])
 api_router.include_router(vendors.router, tags=["厂商管理"])
+api_router.include_router(vendor_commands.router, tags=["厂商命令管理"])
 api_router.include_router(query_templates.router, tags=["查询模板管理"])
 api_router.include_router(query_history.router, tags=["查询历史管理"])
 

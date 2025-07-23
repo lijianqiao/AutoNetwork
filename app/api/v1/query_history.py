@@ -82,11 +82,7 @@ async def batch_create_query_histories(
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_HISTORY_CREATE)),
 ):
     """批量创建查询历史记录"""
-    results = []
-    for history_data in histories_data:
-        result = await service.create(operation_context, **history_data.model_dump())
-        results.append(result)
-    return results
+    return await service.batch_create_histories(histories_data, operation_context)
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除查询历史")
@@ -96,9 +92,8 @@ async def batch_delete_query_histories(
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_HISTORY_DELETE)),
 ):
     """批量删除查询历史"""
-    for history_id in history_ids:
-        await service.delete(history_id, operation_context)
-    return SuccessResponse(message=f"成功删除 {len(history_ids)} 条查询历史")
+    result = await service.batch_delete_histories(history_ids, operation_context)
+    return SuccessResponse(message=f"批量删除完成: 成功 {result['success_count']} 条，失败 {result['failed_count']} 条")
 
 
 # ===== 统计和搜索功能 =====

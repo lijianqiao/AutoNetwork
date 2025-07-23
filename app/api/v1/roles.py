@@ -143,3 +143,37 @@ async def get_role_permissions(
 ):
     """获取角色的权限列表"""
     return await service.get_role_permissions(role_id, operation_context=operation_context)
+
+
+# ===== 批量操作功能 =====
+
+
+@router.post("/batch", response_model=list[RoleResponse], summary="批量创建角色")
+async def batch_create_roles(
+    roles_data: list[RoleCreateRequest],
+    service: RoleService = Depends(get_role_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_CREATE)),
+):
+    """批量创建角色"""
+    return await service.batch_create_roles(roles_data, operation_context)
+
+
+@router.put("/batch", response_model=list[RoleResponse], summary="批量更新角色")
+async def batch_update_roles(
+    updates_data: list[dict],  # [{"id": UUID, **update_fields}]
+    service: RoleService = Depends(get_role_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_UPDATE)),
+):
+    """批量更新角色"""
+    return await service.batch_update_roles(updates_data, operation_context)
+
+
+@router.delete("/batch", response_model=SuccessResponse, summary="批量删除角色")
+async def batch_delete_roles(
+    role_ids: list[UUID],
+    service: RoleService = Depends(get_role_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_DELETE)),
+):
+    """批量删除角色"""
+    deleted_count = await service.batch_delete_roles(role_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 个角色")

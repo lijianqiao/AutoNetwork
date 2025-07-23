@@ -334,3 +334,79 @@ class DeviceService(BaseService[Device]):
             failed_count=len(devices) - success_count,
             results=results,
         )
+
+    # ===== 标准批量操作方法 =====
+
+    @log_create_with_context("device")
+    async def batch_create_devices(
+        self, devices_data: list[DeviceCreateRequest], operation_context: OperationContext
+    ) -> list[DeviceResponse]:
+        """批量创建设备"""
+        # 转换为字典列表
+        data_list = [device_data.model_dump() for device_data in devices_data]
+
+        # 批量验证唯一性约束
+        hostnames = [data.get("hostname") for data in data_list if data.get("hostname")]
+        ip_addresses = [data.get("ip_address") for data in data_list if data.get("ip_address")]
+
+        existing_hostnames = []
+        existing_ips = []
+
+        for hostname in hostnames:
+            if await self.dao.exists(hostname=hostname):
+                existing_hostnames.append(hostname)
+
+        for ip in ip_addresses:
+            if await self.dao.exists(ip_address=ip):
+                existing_ips.append(ip)
+
+        if existing_hostnames:
+            raise BusinessException(f"以下主机名已存在: {', '.join(existing_hostnames)}")
+        if existing_ips:
+            raise BusinessException(f"以下IP地址已存在: {', '.join(existing_ips)}")
+
+        # 使用BaseService的批量创建方法
+        created_devices = await self.bulk_create(data_list)
+        return [DeviceResponse.model_validate(device) for device in created_devices]
+
+    @log_update_with_context("device")
+    async def batch_update_devices(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[DeviceResponse]:
+        """批量更新设备"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有设备是否存在
+        existing_devices = await self.get_by_ids(update_ids)
+        existing_ids = {str(device.id) for device in existing_devices}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下设备不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            update_data["id"] = update_item["id"]
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 返回更新后的数据
+        updated_devices = await self.get_by_ids(update_ids)
+        return [DeviceResponse.model_validate(device) for device in updated_devices]
+
+    @log_delete_with_context("device")
+    async def batch_delete_devices(self, device_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除设备"""
+        # 检查设备是否存在
+        existing_devices = await self.get_by_ids(device_ids)
+        if len(existing_devices) != len(device_ids):
+            missing_ids = {str(id) for id in device_ids} - {str(d.id) for d in existing_devices}
+            raise BusinessException(f"以下设备不存在: {', '.join(missing_ids)}")
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(device_ids, operation_context)

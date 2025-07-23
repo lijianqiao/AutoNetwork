@@ -295,3 +295,78 @@ class UserService(BaseService[User]):
             role_permissions.update(role.permissions)
 
         return direct_permissions.union(role_permissions)
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("user")
+    async def batch_create_users(
+        self, users_data: list[UserCreateRequest], operation_context: OperationContext
+    ) -> list[UserResponse]:
+        """批量创建用户"""
+        # 转换为字典列表并进行验证
+        data_list = []
+        for user_data in users_data:
+            data = user_data.model_dump()
+            # 应用前置验证
+            validated_data = await self.before_create(data)
+            data_list.append(validated_data)
+
+        # 使用BaseService的批量创建方法
+        created_users = await self.bulk_create(data_list)
+        return [UserResponse.model_validate(user) for user in created_users]
+
+    @log_update_with_context("user")
+    async def batch_update_users(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[UserResponse]:
+        """批量更新用户"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有用户是否存在
+        existing_users = await self.get_by_ids(update_ids)
+        existing_ids = {str(user.id) for user in existing_users}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下用户不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据，处理密码哈希
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            if "password" in update_data and update_data["password"]:
+                update_data["password"] = hash_password(update_data["password"])
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 清除相关用户的权限缓存
+        for user_id in update_ids:
+            invalidate_user_permission_cache(user_id)
+
+        # 返回更新后的数据
+        updated_users = await self.get_by_ids(update_ids)
+        return [UserResponse.model_validate(user) for user in updated_users]
+
+    @log_delete_with_context("user")
+    async def batch_delete_users(self, user_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除用户"""
+        # 检查用户是否存在
+        existing_users = await self.get_by_ids(user_ids)
+        if len(existing_users) != len(user_ids):
+            missing_ids = {str(id) for id in user_ids} - {str(u.id) for u in existing_users}
+            raise BusinessException(f"以下用户不存在: {', '.join(missing_ids)}")
+
+        # 检查是否尝试删除超级用户
+        for user in existing_users:
+            if user.is_superuser:
+                raise BusinessException(f"不能删除超级用户: {user.username}")
+
+        # 清除相关用户的权限缓存
+        for user_id in user_ids:
+            invalidate_user_permission_cache(user_id)
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(user_ids, operation_context)

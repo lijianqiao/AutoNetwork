@@ -204,3 +204,76 @@ class RoleService(BaseService[Role]):
         if not role:
             raise BusinessException("角色未找到")
         await self.update(role_id, operation_context=operation_context, version=role.version, is_active=is_active)
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("role")
+    async def batch_create_roles(
+        self, roles_data: list[RoleCreateRequest], operation_context: OperationContext
+    ) -> list[RoleResponse]:
+        """批量创建角色"""
+        # 转换为字典列表并进行验证
+        data_list = []
+        for role_data in roles_data:
+            data = role_data.model_dump()
+            # 应用前置验证
+            validated_data = await self.before_create(data)
+            data_list.append(validated_data)
+
+        # 使用BaseService的批量创建方法
+        created_roles = await self.bulk_create(data_list)
+        return [RoleResponse.model_validate(role) for role in created_roles]
+
+    @log_update_with_context("role")
+    async def batch_update_roles(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[RoleResponse]:
+        """批量更新角色"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有角色是否存在
+        existing_roles = await self.get_by_ids(update_ids)
+        existing_ids = {str(role.id) for role in existing_roles}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下角色不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 清除相关角色的权限缓存
+        for role_id in update_ids:
+            invalidate_role_permission_cache(role_id)
+
+        # 返回更新后的数据
+        updated_roles = await self.get_by_ids(update_ids)
+        return [RoleResponse.model_validate(role) for role in updated_roles]
+
+    @log_delete_with_context("role")
+    async def batch_delete_roles(self, role_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除角色"""
+        # 检查角色是否存在
+        existing_roles = await self.get_by_ids(role_ids)
+        if len(existing_roles) != len(role_ids):
+            missing_ids = {str(id) for id in role_ids} - {str(r.id) for r in existing_roles}
+            raise BusinessException(f"以下角色不存在: {', '.join(missing_ids)}")
+
+        # 检查是否存在内置角色不可删除
+        for role in existing_roles:
+            if role.role_code in ["admin", "user", "super_admin"]:  # 假设这些是系统内置角色
+                raise BusinessException(f"不能删除系统内置角色: {role.role_name}")
+
+        # 清除相关角色的权限缓存
+        for role_id in role_ids:
+            invalidate_role_permission_cache(role_id)
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(role_ids, operation_context)

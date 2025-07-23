@@ -273,26 +273,70 @@ class DeviceConfigService(BaseService[DeviceConfig]):
             raise ValueError("更新配置快照失败")
         return updated_config
 
-    async def batch_delete_configs(self, config_ids: list[UUID], operation_context: OperationContext) -> dict[str, Any]:
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("device_config")
+    async def batch_create_configs(
+        self, configs_data: list[dict], operation_context: OperationContext
+    ) -> list[DeviceConfig]:
+        """批量创建设备配置快照"""
+        # 转换为字典列表并进行验证
+        data_list = []
+        for config_data in configs_data:
+            # 应用前置验证
+            validated_data = await self.before_create(config_data)
+            data_list.append(validated_data)
+
+        # 使用BaseService的批量创建方法
+        created_configs = await self.bulk_create(data_list)
+        return created_configs
+
+    @log_update_with_context("device_config")
+    async def batch_update_configs(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[DeviceConfig]:
+        """批量更新设备配置快照"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有配置是否存在
+        existing_configs = await self.get_by_ids(update_ids)
+        existing_ids = {str(config.id) for config in existing_configs}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            from app.core.exceptions import BusinessException
+
+            raise BusinessException(f"以下配置快照不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据，处理配置哈希
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            if "config_content" in update_data:
+                update_data["config_hash"] = self._generate_config_hash(update_data["config_content"])
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 返回更新后的数据
+        updated_configs = await self.get_by_ids(update_ids)
+        return updated_configs
+
+    @log_delete_with_context("device_config")
+    async def batch_delete_configs(self, config_ids: list[UUID], operation_context: OperationContext) -> int:
         """批量删除配置快照"""
-        deleted_configs = []
-        failed_configs = []
+        # 检查配置是否存在
+        existing_configs = await self.get_by_ids(config_ids)
+        if len(existing_configs) != len(config_ids):
+            missing_ids = {str(id) for id in config_ids} - {str(c.id) for c in existing_configs}
+            from app.core.exceptions import BusinessException
 
-        for config_id in config_ids:
-            try:
-                await self.dao.delete_by_id(config_id)
-                deleted_configs.append(config_id)
-            except Exception as e:
-                logger.error(f"删除配置快照 {config_id} 失败: {e}")
-                failed_configs.append({"config_id": config_id, "error": str(e)})
+            raise BusinessException(f"以下配置快照不存在: {', '.join(missing_ids)}")
 
-        return {
-            "total_requested": len(config_ids),
-            "deleted_count": len(deleted_configs),
-            "failed_count": len(failed_configs),
-            "deleted_configs": deleted_configs,
-            "failed_configs": failed_configs,
-        }
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(config_ids, operation_context)
 
     async def get_configs_paginated(
         self,

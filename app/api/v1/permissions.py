@@ -92,3 +92,37 @@ async def update_permission_status(
     """更新权限状态"""
     await service.update_permission_status(permission_id, is_active, operation_context=operation_context)
     return SuccessResponse()
+
+
+# ===== 批量操作功能 =====
+
+
+@router.post("/batch", response_model=list[PermissionResponse], summary="批量创建权限")
+async def batch_create_permissions(
+    permissions_data: list[PermissionCreateRequest],
+    service: PermissionService = Depends(get_permission_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.PERMISSION_CREATE)),
+):
+    """批量创建权限"""
+    return await service.batch_create_permissions(permissions_data, operation_context)
+
+
+@router.put("/batch", response_model=list[PermissionResponse], summary="批量更新权限")
+async def batch_update_permissions(
+    updates_data: list[dict],  # [{"id": UUID, **update_fields}]
+    service: PermissionService = Depends(get_permission_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.PERMISSION_UPDATE)),
+):
+    """批量更新权限"""
+    return await service.batch_update_permissions(updates_data, operation_context)
+
+
+@router.delete("/batch", response_model=SuccessResponse, summary="批量删除权限")
+async def batch_delete_permissions(
+    permission_ids: list[UUID],
+    service: PermissionService = Depends(get_permission_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.PERMISSION_DELETE)),
+):
+    """批量删除权限"""
+    deleted_count = await service.batch_delete_permissions(permission_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 个权限")

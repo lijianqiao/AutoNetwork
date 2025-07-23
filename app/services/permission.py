@@ -139,3 +139,76 @@ class PermissionService(BaseService[Permission]):
     ) -> None:
         """更新权限状态"""
         await self.update(permission_id, is_active=is_active, operation_context=operation_context)
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("permission")
+    async def batch_create_permissions(
+        self, permissions_data: list[PermissionCreateRequest], operation_context: OperationContext
+    ) -> list[PermissionResponse]:
+        """批量创建权限"""
+        # 转换为字典列表并进行验证
+        data_list = []
+        for permission_data in permissions_data:
+            data = permission_data.model_dump()
+            # 应用前置验证
+            validated_data = await self.before_create(data)
+            data_list.append(validated_data)
+
+        # 使用BaseService的批量创建方法
+        created_permissions = await self.bulk_create(data_list)
+        return [PermissionResponse.model_validate(permission) for permission in created_permissions]
+
+    @log_update_with_context("permission")
+    async def batch_update_permissions(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[PermissionResponse]:
+        """批量更新权限"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有权限是否存在
+        existing_permissions = await self.get_by_ids(update_ids)
+        existing_ids = {str(perm.id) for perm in existing_permissions}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下权限不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 返回更新后的数据
+        updated_permissions = await self.get_by_ids(update_ids)
+        return [PermissionResponse.model_validate(permission) for permission in updated_permissions]
+
+    @log_delete_with_context("permission")
+    async def batch_delete_permissions(self, permission_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除权限"""
+        # 检查权限是否存在
+        existing_permissions = await self.get_by_ids(permission_ids)
+        if len(existing_permissions) != len(permission_ids):
+            missing_ids = {str(id) for id in permission_ids} - {str(p.id) for p in existing_permissions}
+            raise BusinessException(f"以下权限不存在: {', '.join(missing_ids)}")
+
+        # 检查是否存在系统权限不可删除
+        system_permission_codes = [
+            "user_create",
+            "user_read",
+            "user_update",
+            "user_delete",
+            "role_manage",
+            "permission_manage",
+        ]
+        for permission in existing_permissions:
+            if permission.permission_code in system_permission_codes:
+                raise BusinessException(f"不能删除系统权限: {permission.permission_name}")
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(permission_ids, operation_context)

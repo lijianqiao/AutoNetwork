@@ -95,11 +95,7 @@ async def batch_create_regions(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_CREATE)),
 ):
     """批量创建基地"""
-    results = []
-    for region_data in regions_data:
-        result = await service.create_region(region_data, operation_context=operation_context)
-        results.append(result)
-    return results
+    return await service.batch_create_regions(regions_data, operation_context)
 
 
 @router.put("/batch", response_model=list[RegionResponse], summary="批量更新基地")
@@ -109,13 +105,7 @@ async def batch_update_regions(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_UPDATE)),
 ):
     """批量更新基地"""
-    results = []
-    for update_item in updates_data:
-        region_id = update_item["id"]
-        region_data = RegionUpdateRequest(**update_item["data"])
-        result = await service.update_region(region_id, region_data, operation_context=operation_context)
-        results.append(result)
-    return results
+    return await service.batch_update_regions(updates_data, operation_context)
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除基地")
@@ -125,9 +115,8 @@ async def batch_delete_regions(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_DELETE)),
 ):
     """批量删除基地"""
-    for region_id in region_ids:
-        await service.delete_region(region_id, operation_context=operation_context)
-    return SuccessResponse(message=f"成功删除 {len(region_ids)} 个基地")
+    deleted_count = await service.batch_delete_regions(region_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 个基地")
 
 
 @router.get("/code/{region_code}", response_model=RegionDetailResponse, summary="根据代码获取基地")

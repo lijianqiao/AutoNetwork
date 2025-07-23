@@ -156,94 +156,64 @@ class VendorCommandService(BaseService[VendorCommand]):
     @log_create_with_context("vendor_command")
     async def batch_create_commands(
         self, data: VendorCommandBatchCreateRequest, operation_context: OperationContext
-    ) -> dict[str, Any]:
+    ) -> list[VendorCommandResponse]:
         """批量创建厂商命令"""
         if not data.commands:
             raise BusinessException("请提供要创建的命令列表")
 
-        success_count = 0
-        failed_items = []
-        created_commands = []
-
+        # 转换为字典列表并添加template_id
+        data_list = []
         for command_data in data.commands:
-            try:
-                # 创建命令 - 假设command_data是dict格式
-                command_dict = command_data if isinstance(command_data, dict) else command_data.model_dump()
-                command_dict["template_id"] = data.template_id  # 使用批量请求中的template_id
+            command_dict = command_data if isinstance(command_data, dict) else command_data.model_dump()
+            command_dict["template_id"] = data.template_id
 
-                command = await self.create(operation_context, **command_dict)
-                created_commands.append(VendorCommandResponse.model_validate(command))
-                success_count += 1
+            # 应用前置验证
+            validated_data = await self.before_create(command_dict)
+            data_list.append(validated_data)
 
-            except Exception as e:
-                logger.error(f"批量创建厂商命令失败: {e}")
-                failed_items.append(
-                    {
-                        "data": command_data,
-                        "reason": str(e),
-                    }
-                )
-
-        return {
-            "success_count": success_count,
-            "failed_count": len(failed_items),
-            "failed_items": failed_items,
-            "created_commands": created_commands,
-        }
+        # 使用BaseService的批量创建方法
+        created_commands = await self.bulk_create(data_list)
+        return [VendorCommandResponse.model_validate(command) for command in created_commands]
 
     @log_update_with_context("vendor_command")
     async def batch_update_status(
         self, command_ids: list[UUID], is_active: bool, operation_context: OperationContext
-    ) -> dict[str, Any]:
+    ) -> int:
         """批量更新命令状态"""
         if not command_ids:
             raise BusinessException("请提供要更新的命令ID")
 
-        success_count = 0
-        failed_items = []
+        # 检查所有命令是否存在
+        existing_commands = await self.get_by_ids(command_ids)
+        existing_ids = {str(command.id) for command in existing_commands}
+        missing_ids = [str(id) for id in command_ids if str(id) not in existing_ids]
 
+        if missing_ids:
+            raise BusinessException(f"以下厂商命令不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
         for command_id in command_ids:
-            try:
-                command = await self.get_by_id(command_id)
-                if not command:
-                    failed_items.append({"id": str(command_id), "reason": "命令不存在"})
-                    continue
+            bulk_update_data.append({"id": command_id, "is_active": is_active})
 
-                await self.update(command_id, operation_context, is_active=is_active)
-                success_count += 1
-
-            except Exception as e:
-                logger.error(f"更新厂商命令状态 {command_id} 失败: {e}")
-                failed_items.append({"id": str(command_id), "reason": str(e)})
-
-        return {"success_count": success_count, "failed_count": len(failed_items), "failed_items": failed_items}
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+        return len(command_ids)
 
     @log_delete_with_context("vendor_command")
-    async def batch_delete_commands(
-        self, command_ids: list[UUID], operation_context: OperationContext
-    ) -> dict[str, Any]:
+    async def batch_delete_commands(self, command_ids: list[UUID], operation_context: OperationContext) -> int:
         """批量删除厂商命令"""
         if not command_ids:
             raise BusinessException("请提供要删除的命令ID")
 
-        success_count = 0
-        failed_items = []
+        # 检查命令是否存在
+        existing_commands = await self.get_by_ids(command_ids)
+        if len(existing_commands) != len(command_ids):
+            missing_ids = {str(id) for id in command_ids} - {str(cmd.id) for cmd in existing_commands}
+            raise BusinessException(f"以下厂商命令不存在: {', '.join(missing_ids)}")
 
-        for command_id in command_ids:
-            try:
-                command = await self.get_by_id(command_id)
-                if not command:
-                    failed_items.append({"id": str(command_id), "reason": "命令不存在"})
-                    continue
-
-                await self.soft_delete(command_id)
-                success_count += 1
-
-            except Exception as e:
-                logger.error(f"删除厂商命令 {command_id} 失败: {e}")
-                failed_items.append({"id": str(command_id), "reason": str(e)})
-
-        return {"success_count": success_count, "failed_count": len(failed_items), "failed_items": failed_items}
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(command_ids, operation_context)
 
     @log_query_with_context("vendor_command")
     async def get_command_statistics(self, operation_context: OperationContext) -> dict[str, Any]:

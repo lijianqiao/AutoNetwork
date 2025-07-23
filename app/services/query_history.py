@@ -102,11 +102,12 @@ class QueryHistoryService(BaseService[QueryHistory]):
             filters["status"] = params.status
 
         # 查询数据
-        histories = await self.get_all(**filters)
-        total = await self.count(**filters)
+        histories, total = await self.get_paginated(**filters)
+        responses = [QueryHistoryResponse.model_validate(history) for history in histories]
 
-        return QueryHistoryListResponse(data=[QueryHistoryResponse.model_validate(h) for h in histories], total=total)
+        return QueryHistoryListResponse(data=responses, total=total, page=params.page, page_size=params.page_size)
 
+    @log_query_with_context("query_history")
     @log_query_with_context("query_history")
     async def get_history_by_id(self, history_id: UUID, operation_context: OperationContext) -> QueryHistoryResponse:
         """根据ID获取查询历史详情"""
@@ -167,6 +168,25 @@ class QueryHistoryService(BaseService[QueryHistory]):
         except Exception as e:
             logger.error(f"获取用户 {target_user_id} 的查询统计信息失败: {e}")
             raise BusinessException(f"获取查询统计信息失败: {e}") from e
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("query_history")
+    async def batch_create_histories(
+        self, histories_data: list[QueryHistoryCreateRequest], operation_context: OperationContext
+    ) -> list[QueryHistoryResponse]:
+        """批量创建查询历史记录"""
+        # 转换为字典列表并进行验证
+        data_list = []
+        for history_data in histories_data:
+            data = history_data.model_dump()
+            # 应用前置验证
+            validated_data = await self.before_create(data)
+            data_list.append(validated_data)
+
+        # 使用BaseService的批量创建方法
+        created_histories = await self.bulk_create(data_list)
+        return [QueryHistoryResponse.model_validate(history) for history in created_histories]
 
     @log_delete_with_context("query_history")
     async def batch_delete_histories(

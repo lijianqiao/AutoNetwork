@@ -192,3 +192,37 @@ async def get_user_permissions(
 ):
     """获取用户的直接权限列表"""
     return await user_service.get_user_permissions(user_id, operation_context=operation_context)
+
+
+# ===== 批量操作功能 =====
+
+
+@router.post("/batch", response_model=list[UserResponse], summary="批量创建用户")
+async def batch_create_users(
+    users_data: list[UserCreateRequest],
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_CREATE)),
+):
+    """批量创建用户"""
+    return await user_service.batch_create_users(users_data, operation_context)
+
+
+@router.put("/batch", response_model=list[UserResponse], summary="批量更新用户")
+async def batch_update_users(
+    updates_data: list[dict],  # [{"id": UUID, **update_fields}]
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_UPDATE)),
+):
+    """批量更新用户"""
+    return await user_service.batch_update_users(updates_data, operation_context)
+
+
+@router.delete("/batch", response_model=SuccessResponse, summary="批量删除用户")
+async def batch_delete_users(
+    user_ids: list[UUID],
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_DELETE)),
+):
+    """批量删除用户"""
+    deleted_count = await user_service.batch_delete_users(user_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 个用户")

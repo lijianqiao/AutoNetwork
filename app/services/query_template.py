@@ -233,3 +233,69 @@ class QueryTemplateService(BaseService[QueryTemplate]):
             template_data.command_count = len(getattr(template, "vendor_commands", []))
             template_responses.append(template_data)
         return template_responses
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("query_template")
+    async def batch_create_templates(
+        self, templates_data: list[QueryTemplateCreateRequest], operation_context: OperationContext
+    ) -> list[QueryTemplateResponse]:
+        """批量创建查询模板"""
+        # 转换为字典列表
+        data_list = [template_data.model_dump() for template_data in templates_data]
+
+        # 批量验证模板名称唯一性
+        template_names = [data.get("template_name") for data in data_list if data.get("template_name")]
+        existing_names = []
+        for name in template_names:
+            if await self.dao.exists(template_name=name):
+                existing_names.append(name)
+
+        if existing_names:
+            raise BusinessException(f"以下模板名称已存在: {', '.join(existing_names)}")
+
+        # 使用BaseService的批量创建方法
+        created_templates = await self.bulk_create(data_list)
+        return [QueryTemplateResponse.model_validate(template) for template in created_templates]
+
+    @log_update_with_context("query_template")
+    async def batch_update_templates(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[QueryTemplateResponse]:
+        """批量更新查询模板"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有模板是否存在
+        existing_templates = await self.get_by_ids(update_ids)
+        existing_ids = {str(template.id) for template in existing_templates}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下查询模板不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            update_data["id"] = update_item["id"]
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 返回更新后的数据
+        updated_templates = await self.get_by_ids(update_ids)
+        return [QueryTemplateResponse.model_validate(template) for template in updated_templates]
+
+    @log_delete_with_context("query_template")
+    async def batch_delete_templates(self, template_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除查询模板"""
+        # 检查模板是否存在
+        existing_templates = await self.get_by_ids(template_ids)
+        if len(existing_templates) != len(template_ids):
+            missing_ids = {str(id) for id in template_ids} - {str(t.id) for t in existing_templates}
+            raise BusinessException(f"以下查询模板不存在: {', '.join(missing_ids)}")
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(template_ids, operation_context)

@@ -95,11 +95,7 @@ async def batch_create_devices(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CREATE)),
 ):
     """批量创建设备"""
-    results = []
-    for device_data in devices_data:
-        result = await service.create_device(device_data, operation_context=operation_context)
-        results.append(result)
-    return results
+    return await service.batch_create_devices(devices_data, operation_context)
 
 
 @router.put("/batch", response_model=list[DeviceResponse], summary="批量更新设备")
@@ -109,13 +105,7 @@ async def batch_update_devices(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_UPDATE)),
 ):
     """批量更新设备"""
-    results = []
-    for update_item in updates_data:
-        device_id = update_item["id"]
-        device_data = DeviceUpdateRequest(**update_item["data"])
-        result = await service.update_device(device_id, device_data, operation_context=operation_context)
-        results.append(result)
-    return results
+    return await service.batch_update_devices(updates_data, operation_context)
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除设备")
@@ -125,9 +115,8 @@ async def batch_delete_devices(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_DELETE)),
 ):
     """批量删除设备"""
-    for device_id in device_ids:
-        await service.delete_device(device_id, operation_context=operation_context)
-    return SuccessResponse(message=f"成功删除 {len(device_ids)} 台设备")
+    deleted_count = await service.batch_delete_devices(device_ids, operation_context)
+    return SuccessResponse(message=f"成功删除 {deleted_count} 台设备")
 
 
 @router.post("/{device_id}/test-connection", response_model=dict, summary="测试设备连接")

@@ -166,3 +166,71 @@ class RegionService(BaseService[Region]):
             region_data.device_count = await self.device_dao.count(region_id=region.id)
             region_responses.append(region_data)
         return region_responses
+
+    # ===== 批量操作方法 =====
+
+    @log_create_with_context("region")
+    async def batch_create_regions(
+        self, regions_data: list[RegionCreateRequest], operation_context: OperationContext
+    ) -> list[RegionResponse]:
+        """批量创建基地"""
+        # 转换为字典列表
+        data_list = [region_data.model_dump() for region_data in regions_data]
+
+        # 批量验证基地代码唯一性
+        region_codes = [data.get("region_code") for data in data_list if data.get("region_code")]
+        existing_codes = []
+        for code in region_codes:
+            if await self.dao.exists(region_code=code):
+                existing_codes.append(code)
+
+        if existing_codes:
+            raise BusinessException(f"以下基地代码已存在: {', '.join(existing_codes)}")
+
+        # 使用BaseService的批量创建方法
+        created_regions = await self.bulk_create(data_list)
+        return [RegionResponse.model_validate(region) for region in created_regions]
+
+    @log_update_with_context("region")
+    async def batch_update_regions(
+        self, updates_data: list[dict], operation_context: OperationContext
+    ) -> list[RegionResponse]:
+        """批量更新基地"""
+        # 提取所有要更新的ID
+        update_ids = [update_item["id"] for update_item in updates_data]
+
+        # 检查所有基地是否存在
+        existing_regions = await self.get_by_ids(update_ids)
+        existing_ids = {str(region.id) for region in existing_regions}
+        missing_ids = [str(id) for id in update_ids if str(id) not in existing_ids]
+
+        if missing_ids:
+            raise BusinessException(f"以下基地不存在: {', '.join(missing_ids)}")
+
+        # 准备批量更新数据
+        bulk_update_data = []
+        for update_item in updates_data:
+            update_data = update_item.copy()
+            update_data["id"] = update_item["id"]
+            bulk_update_data.append(update_data)
+
+        # 使用BaseService的批量更新方法
+        await self.bulk_update(bulk_update_data)
+
+        # 返回更新后的数据
+        updated_regions = await self.get_by_ids(update_ids)
+        return [RegionResponse.model_validate(region) for region in updated_regions]
+
+    @log_delete_with_context("region")
+    async def batch_delete_regions(self, region_ids: list[UUID], operation_context: OperationContext) -> int:
+        """批量删除基地"""
+        # 检查是否有设备关联
+        for region_id in region_ids:
+            device_count = await self.device_dao.count(region_id=region_id)
+            if device_count > 0:
+                region = await self.dao.get_by_id(region_id)
+                region_name = region.region_name if region else str(region_id)
+                raise BusinessException(f"基地 '{region_name}' 下还有 {device_count} 台设备，无法删除")
+
+        # 使用BaseService的批量删除方法
+        return await self.delete_by_ids(region_ids, operation_context)
