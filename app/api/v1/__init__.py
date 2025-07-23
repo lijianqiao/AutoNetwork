@@ -14,6 +14,7 @@ from app.api.v1 import (
     auth,
     device_configs,
     devices,
+    import_export,
     operation_logs,
     permission_cache,
     permissions,
@@ -47,6 +48,7 @@ api_router.include_router(vendors.router, tags=["厂商管理"])
 api_router.include_router(vendor_commands.router, tags=["厂商命令管理"])
 api_router.include_router(query_templates.router, tags=["查询模板管理"])
 api_router.include_router(query_history.router, tags=["查询历史管理"])
+api_router.include_router(import_export.router, tags=["导入导出"])
 
 # 保持向后兼容
 v1_router = api_router

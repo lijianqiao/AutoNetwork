@@ -473,6 +473,15 @@ class Permissions:
     NETWORK_QUERY_CUSTOM = "network_query:custom"
     NETWORK_QUERY_TEMPLATE_LIST = "network_query:template_list"
 
+    # 导入导出功能
+    IMPORT_EXPORT_ACCESS = "import_export:access"
+    IMPORT_EXPORT_TEMPLATE = "import_export:template"
+    IMPORT_EXPORT_IMPORT = "import_export:import"
+    IMPORT_EXPORT_EXPORT = "import_export:export"
+    IMPORT_EXPORT_DEVICE_TEMPLATE = "import_export:device_template"
+    IMPORT_EXPORT_DEVICE_IMPORT = "import_export:device_import"
+    IMPORT_EXPORT_DEVICE_EXPORT = "import_export:device_export"
+
 
 # ===== 向后兼容函数 =====
 

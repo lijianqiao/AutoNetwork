@@ -94,6 +94,12 @@ def get_device_config_service():
     return DeviceConfigService()
 
 
+def get_import_export_service():
+    from app.services.import_export import ImportExportService
+
+    return ImportExportService()
+
+
 def get_security_manager() -> SecurityManager:
     return security_manager
 
