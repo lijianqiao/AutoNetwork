@@ -52,6 +52,48 @@ def get_operation_log_service():
     return OperationLogService()
 
 
+def get_device_service():
+    from app.services.device import DeviceService
+
+    return DeviceService()
+
+
+def get_vendor_command_service():
+    from app.services.vendor_command import VendorCommandService
+
+    return VendorCommandService()
+
+
+def get_query_history_service():
+    from app.services.query_history import QueryHistoryService
+
+    return QueryHistoryService()
+
+
+def get_query_template_service():
+    from app.services.query_template import QueryTemplateService
+
+    return QueryTemplateService()
+
+
+def get_region_service():
+    from app.services.region import RegionService
+
+    return RegionService()
+
+
+def get_vendor_service():
+    from app.services.vendor import VendorService
+
+    return VendorService()
+
+
+def get_device_config_service():
+    from app.services.device_config import DeviceConfigService
+
+    return DeviceConfigService()
+
+
 def get_security_manager() -> SecurityManager:
     return security_manager
 
