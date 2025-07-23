@@ -7,10 +7,17 @@
 """
 
 from .base import BaseModel
+from .device import Device
+from .device_config import DeviceConfig
 from .operation_log import OperationLog
 from .permission import Permission
+from .query_history import QueryHistory
+from .query_template import QueryTemplate
+from .region import Region
 from .role import Role
 from .user import User
+from .vendor import Vendor
+from .vendor_command import VendorCommand
 
 __all__ = [
     "BaseModel",
@@ -18,4 +25,11 @@ __all__ = [
     "Role",
     "Permission",
     "OperationLog",
+    "Device",
+    "Region",
+    "DeviceConfig",
+    "QueryTemplate",
+    "Vendor",
+    "VendorCommand",
+    "QueryHistory",
 ]

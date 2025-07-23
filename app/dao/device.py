@@ -1,0 +1,204 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: device.py
+@DateTime: 2025/07/23
+@Docs: 设备数据访问层
+"""
+
+from uuid import UUID
+
+from app.dao.base import BaseDAO
+from app.models.device import Device
+from app.utils.logger import logger
+
+
+class DeviceDAO(BaseDAO[Device]):
+    """设备数据访问层"""
+
+    def __init__(self):
+        super().__init__(Device)
+
+    async def get_by_hostname(self, hostname: str) -> Device | None:
+        """根据主机名获取设备"""
+        try:
+            return await self.model.get_or_none(hostname=hostname, is_deleted=False)
+        except Exception as e:
+            logger.error(f"根据主机名获取设备失败: {e}")
+            return None
+
+    async def get_by_ip_address(self, ip_address: str) -> Device | None:
+        """根据IP地址获取设备"""
+        try:
+            return await self.model.get_or_none(ip_address=ip_address, is_deleted=False)
+        except Exception as e:
+            logger.error(f"根据IP地址获取设备失败: {e}")
+            return None
+
+    async def check_hostname_exists(self, hostname: str, exclude_id: UUID | None = None) -> bool:
+        """检查主机名是否已存在"""
+        try:
+            filters = {"hostname": hostname, "is_deleted": False}
+            if exclude_id:
+                filters["id__not"] = exclude_id
+            return await self.model.filter(**filters).exists()
+        except Exception as e:
+            logger.error(f"检查主机名是否存在失败: {e}")
+            return False
+
+    async def check_ip_exists(self, ip_address: str, exclude_id: UUID | None = None) -> bool:
+        """检查IP地址是否已存在"""
+        try:
+            filters = {"ip_address": ip_address, "is_deleted": False}
+            if exclude_id:
+                filters["id__not"] = exclude_id
+            return await self.model.filter(**filters).exists()
+        except Exception as e:
+            logger.error(f"检查IP地址是否存在失败: {e}")
+            return False
+
+    async def get_active_devices(self) -> list[Device]:
+        """获取所有在用的设备"""
+        try:
+            return await self.model.filter(is_active=True, is_deleted=False).order_by("hostname").all()
+        except Exception as e:
+            logger.error(f"获取在用设备失败: {e}")
+            return []
+
+    async def search_devices(
+        self,
+        keyword: str | None = None,
+        vendor_id: UUID | None = None,
+        region_id: UUID | None = None,
+        device_type: str | None = None,
+        network_layer: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[Device]:
+        """搜索设备"""
+        try:
+            filters: dict = {"is_deleted": False}
+            if vendor_id:
+                filters["vendor_id"] = vendor_id
+            if region_id:
+                filters["region_id"] = region_id
+            if device_type:
+                filters["device_type"] = device_type
+            if network_layer:
+                filters["network_layer"] = network_layer
+            if is_active is not None:
+                filters["is_active"] = is_active
+
+            queryset = self.model.filter(**filters)
+
+            if keyword:
+                from tortoise.expressions import Q
+
+                queryset = queryset.filter(
+                    Q(hostname__icontains=keyword)
+                    | Q(ip_address__icontains=keyword)
+                    | Q(model__icontains=keyword)
+                    | Q(location__icontains=keyword)
+                )
+
+            return await queryset.order_by("hostname").all()
+        except Exception as e:
+            logger.error(f"搜索设备失败: {e}")
+            return []
+
+    async def get_devices_by_vendor(self, vendor_id: UUID) -> list[Device]:
+        """根据厂商获取设备列表"""
+        try:
+            return await self.model.filter(vendor_id=vendor_id, is_deleted=False).all()
+        except Exception as e:
+            logger.error(f"根据厂商获取设备失败: {e}")
+            return []
+
+    async def get_devices_by_region(self, region_id: UUID) -> list[Device]:
+        """根据基地获取设备列表"""
+        try:
+            return await self.model.filter(region_id=region_id, is_deleted=False).all()
+        except Exception as e:
+            logger.error(f"根据基地获取设备失败: {e}")
+            return []
+
+    async def activate_device(self, device_id: UUID) -> bool:
+        """激活设备"""
+        try:
+            count = await self.model.filter(id=device_id, is_deleted=False).update(is_active=True)
+            return count > 0
+        except Exception as e:
+            logger.error(f"激活设备失败: {e}")
+            return False
+
+    async def deactivate_device(self, device_id: UUID) -> bool:
+        """停用设备"""
+        try:
+            count = await self.model.filter(id=device_id, is_deleted=False).update(is_active=False)
+            return count > 0
+        except Exception as e:
+            logger.error(f"停用设备失败: {e}")
+            return False
+
+    async def update_last_connected(self, device_id: UUID) -> bool:
+        """更新设备最后连接时间"""
+        try:
+            from datetime import datetime
+
+            count = await self.model.filter(id=device_id, is_deleted=False).update(last_connected_at=datetime.now())
+            return count > 0
+        except Exception as e:
+            logger.error(f"更新设备连接时间失败: {e}")
+            return False
+
+    async def get_devices_with_relations(self) -> list[Device]:
+        """获取设备及其关联的厂商和基地信息"""
+        try:
+            return await self.get_all_with_related(
+                select_related=["vendor", "region"],
+                prefetch_related=["configs"],
+            )
+        except Exception as e:
+            logger.error(f"获取设备及关联信息失败: {e}")
+            return []
+
+    async def get_device_with_details(self, device_id: UUID) -> Device | None:
+        """获取设备详细信息"""
+        try:
+            return await self.get_with_related(
+                id=device_id,
+                select_related=["vendor", "region"],
+                prefetch_related=["configs"],
+            )
+        except Exception as e:
+            logger.error(f"获取设备详细信息失败: {e}")
+            return None
+
+    async def get_devices_paginated_optimized(
+        self,
+        page: int = 1,
+        page_size: int = 20,
+        vendor_id: UUID | None = None,
+        region_id: UUID | None = None,
+        is_active: bool | None = None,
+    ) -> tuple[list[Device], int]:
+        """分页获取设备"""
+        try:
+            filters: dict = {"is_deleted": False}
+            if vendor_id:
+                filters["vendor_id"] = vendor_id
+            if region_id:
+                filters["region_id"] = region_id
+            if is_active is not None:
+                filters["is_active"] = is_active
+
+            return await self.get_paginated_with_related(
+                page=page,
+                page_size=page_size,
+                order_by=["hostname"],
+                select_related=["vendor", "region"],
+                prefetch_related=None,
+                **filters,
+            )
+        except Exception as e:
+            logger.error(f"分页获取设备失败: {e}")
+            return [], 0
