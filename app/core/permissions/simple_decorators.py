@@ -141,7 +141,7 @@ class PermissionCache:
                 return
             cache_backend = await self._get_cache_backend()
             backend_type = cache_backend.__class__.__name__
-            tasks =  [self.invalidate_user_cache(user_id) for user_id in user_ids]
+            tasks = [self.invalidate_user_cache(user_id) for user_id in user_ids]
             await asyncio.gather(*tasks)
             logger.info(f"角色 {role_id} 相关的用户权限缓存清除完成，后端={backend_type}")
         except Exception as e:
@@ -405,6 +405,71 @@ class Permissions:
 
     # 用户密码重置
     USER_RESET_PASSWORD = "user:reset_password"
+
+    # ===== 网络自动化权限 =====
+
+    # 基地管理
+    REGION_CREATE = "region:create"
+    REGION_READ = "region:read"
+    REGION_UPDATE = "region:update"
+    REGION_DELETE = "region:delete"
+    REGION_ACCESS = "region:access"
+
+    # 厂商管理
+    VENDOR_CREATE = "vendor:create"
+    VENDOR_READ = "vendor:read"
+    VENDOR_UPDATE = "vendor:update"
+    VENDOR_DELETE = "vendor:delete"
+    VENDOR_ACCESS = "vendor:access"
+
+    # 设备管理
+    DEVICE_CREATE = "device:create"
+    DEVICE_READ = "device:read"
+    DEVICE_UPDATE = "device:update"
+    DEVICE_DELETE = "device:delete"
+    DEVICE_ACCESS = "device:access"
+    DEVICE_CONNECTION_TEST = "device:connection_test"
+    DEVICE_BATCH_OPERATION = "device:batch_operation"
+
+    # 查询模板管理
+    QUERY_TEMPLATE_CREATE = "query_template:create"
+    QUERY_TEMPLATE_READ = "query_template:read"
+    QUERY_TEMPLATE_UPDATE = "query_template:update"
+    QUERY_TEMPLATE_DELETE = "query_template:delete"
+    QUERY_TEMPLATE_ACCESS = "query_template:access"
+    QUERY_TEMPLATE_ACTIVATE = "query_template:activate"
+
+    # 厂商命令管理
+    VENDOR_COMMAND_CREATE = "vendor_command:create"
+    VENDOR_COMMAND_READ = "vendor_command:read"
+    VENDOR_COMMAND_UPDATE = "vendor_command:update"
+    VENDOR_COMMAND_DELETE = "vendor_command:delete"
+    VENDOR_COMMAND_ACCESS = "vendor_command:access"
+
+    # 查询历史管理
+    QUERY_HISTORY_READ = "query_history:read"
+    QUERY_HISTORY_DELETE = "query_history:delete"
+    QUERY_HISTORY_ACCESS = "query_history:access"
+    QUERY_HISTORY_CLEANUP = "query_history:cleanup"
+    QUERY_HISTORY_STATISTICS = "query_history:statistics"
+
+    # 设备配置管理
+    DEVICE_CONFIG_CREATE = "device_config:create"
+    DEVICE_CONFIG_READ = "device_config:read"
+    DEVICE_CONFIG_UPDATE = "device_config:update"
+    DEVICE_CONFIG_DELETE = "device_config:delete"
+    DEVICE_CONFIG_ACCESS = "device_config:access"
+    DEVICE_CONFIG_BACKUP = "device_config:backup"
+    DEVICE_CONFIG_COMPARE = "device_config:compare"
+    DEVICE_CONFIG_CLEANUP = "device_config:cleanup"
+
+    # 网络查询功能
+    NETWORK_QUERY_EXECUTE = "network_query:execute"
+    NETWORK_QUERY_ACCESS = "network_query:access"
+    NETWORK_QUERY_MAC = "network_query:mac"
+    NETWORK_QUERY_INTERFACE = "network_query:interface"
+    NETWORK_QUERY_CUSTOM = "network_query:custom"
+    NETWORK_QUERY_TEMPLATE_LIST = "network_query:template_list"
 
 
 # ===== 向后兼容函数 =====

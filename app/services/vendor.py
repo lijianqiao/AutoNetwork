@@ -1,0 +1,191 @@
+"""
+@Author: li
+@Email: lijianqiao2906@live.com
+@FileName: vendor.py
+@DateTime: 2025/07/23
+@Docs: 设备厂商服务层 - 使用操作上下文依赖注入
+"""
+
+from typing import Any
+from uuid import UUID
+
+from app.core.exceptions import BusinessException
+from app.dao.device import DeviceDAO
+from app.dao.vendor import VendorDAO
+from app.dao.vendor_command import VendorCommandDAO
+from app.models.vendor import Vendor
+from app.schemas.vendor import (
+    VendorCreateRequest,
+    VendorDetailResponse,
+    VendorListRequest,
+    VendorResponse,
+    VendorUpdateRequest,
+)
+from app.services.base import BaseService
+from app.utils.deps import OperationContext
+from app.utils.logger import logger
+from app.utils.operation_logger import (
+    log_create_with_context,
+    log_delete_with_context,
+    log_query_with_context,
+    log_update_with_context,
+)
+
+
+class VendorService(BaseService[Vendor]):
+    """设备厂商服务"""
+
+    def __init__(self):
+        self.dao = VendorDAO()
+        super().__init__(self.dao)
+        self.device_dao = DeviceDAO()
+        self.vendor_command_dao = VendorCommandDAO()
+
+    async def before_create(self, data: dict[str, Any]) -> dict[str, Any]:
+        """创建前置钩子：检查厂商代码唯一性"""
+        if "vendor_code" in data and await self.dao.exists(vendor_code=data["vendor_code"]):
+            logger.warning(f"创建厂商失败: 厂商代码已存在 {data['vendor_code']}")
+            raise BusinessException("厂商代码已存在")
+        return data
+
+    async def before_update(self, obj: Vendor, data: dict[str, Any]) -> dict[str, Any]:
+        """更新前置钩子：检查厂商代码唯一性"""
+        if "vendor_code" in data and await self.dao.exists(vendor_code=data["vendor_code"], id__not=obj.id):
+            logger.warning(f"更新厂商失败: 厂商代码已存在 {data['vendor_code']}")
+            raise BusinessException("厂商代码已存在")
+        return data
+
+    @log_create_with_context("vendor")
+    async def create_vendor(self, request: VendorCreateRequest, operation_context: OperationContext) -> VendorResponse:
+        """创建厂商"""
+        create_data = request.model_dump(exclude_unset=True)
+        create_data["creator_id"] = operation_context.user.id
+        vendor = await self.create(operation_context=operation_context, **create_data)
+        if not vendor:
+            logger.error("厂商创建失败")
+            raise BusinessException("厂商创建失败")
+        return VendorResponse.model_validate(vendor)
+
+    @log_update_with_context("vendor")
+    async def update_vendor(
+        self, vendor_id: UUID, request: VendorUpdateRequest, operation_context: OperationContext
+    ) -> VendorResponse:
+        """更新厂商"""
+        update_data = request.model_dump(exclude_unset=True)
+
+        version = update_data.pop("version", None)
+        if version is None:
+            logger.error("更新请求必须包含 version 字段。")
+            raise BusinessException("更新请求必须包含 version 字段。")
+
+        updated_vendor = await self.update(
+            vendor_id, operation_context=operation_context, version=version, **update_data
+        )
+        if not updated_vendor:
+            logger.error("厂商更新失败或版本冲突")
+            raise BusinessException("厂商更新失败或版本冲突")
+        return VendorResponse.model_validate(updated_vendor)
+
+    @log_delete_with_context("vendor")
+    async def delete_vendor(self, vendor_id: UUID, operation_context: OperationContext) -> None:
+        """删除厂商，检查是否仍有设备或命令关联"""
+        vendor = await self.dao.get_by_id(vendor_id)
+        if not vendor:
+            logger.error("厂商未找到")
+            raise BusinessException("厂商未找到")
+
+        # 检查是否有设备正在使用此厂商
+        device_count = await self.device_dao.count(vendor_id=vendor_id)
+        if device_count > 0:
+            logger.warning(f"删除厂商失败: 厂商 '{vendor.vendor_name}' 正在被 {device_count} 个设备使用")
+            raise BusinessException(f"厂商 '{vendor.vendor_name}' 正在被 {device_count} 个设备使用，无法删除")
+
+        # 检查是否有厂商命令关联
+        command_count = await self.vendor_command_dao.count(vendor_id=vendor_id)
+        if command_count > 0:
+            logger.warning(f"删除厂商失败: 厂商 '{vendor.vendor_name}' 还有 {command_count} 个命令配置，无法删除")
+            raise BusinessException(f"厂商 '{vendor.vendor_name}' 还有 {command_count} 个命令配置，无法删除")
+
+        await self.delete(vendor_id, operation_context=operation_context)
+
+    @log_query_with_context("vendor")
+    async def get_vendors(
+        self, query: VendorListRequest, operation_context: OperationContext
+    ) -> tuple[list[VendorResponse], int]:
+        """获取厂商列表"""
+        from app.utils.query_utils import list_query_to_orm_filters
+
+        query_dict = query.model_dump(exclude_unset=True)
+
+        VENDOR_MODEL_FIELDS = {"vendor_code", "scrapli_platform"}
+        search_fields = ["vendor_name", "scrapli_platform"]
+
+        model_filters, dao_params = list_query_to_orm_filters(query_dict, search_fields, VENDOR_MODEL_FIELDS)
+
+        order_by = [f"{'-' if query.sort_order == 'desc' else ''}{query.sort_by}"] if query.sort_by else ["-created_at"]
+
+        q_objects = model_filters.pop("q_objects", [])
+
+        vendors, total = await self.get_paginated_with_related(
+            page=query.page,
+            page_size=query.page_size,
+            order_by=order_by,
+            q_objects=q_objects,
+            **dao_params,
+            **model_filters,
+        )
+
+        # 为每个厂商添加统计信息
+        vendor_responses = []
+        for vendor in vendors:
+            vendor_data = VendorResponse.model_validate(vendor)
+            vendor_data.device_count = await self.device_dao.count(vendor_id=vendor.id)
+            vendor_data.command_count = await self.vendor_command_dao.count(vendor_id=vendor.id)
+            vendor_responses.append(vendor_data)
+
+        return vendor_responses, total
+
+    @log_query_with_context("vendor")
+    async def get_vendor_detail(self, vendor_id: UUID, operation_context: OperationContext) -> VendorDetailResponse:
+        """获取厂商详情"""
+        vendor = await self.dao.get_by_id(vendor_id)
+        if not vendor:
+            logger.error("厂商未找到")
+            raise BusinessException("厂商未找到")
+        return VendorDetailResponse.model_validate(vendor)
+
+    @log_query_with_context("vendor")
+    async def get_vendor_by_code(self, vendor_code: str, operation_context: OperationContext) -> VendorResponse:
+        """根据厂商代码获取厂商"""
+        vendor = await self.dao.get_by_vendor_code(vendor_code)
+        if not vendor:
+            logger.error(f"厂商代码 '{vendor_code}' 未找到")
+            raise BusinessException(f"厂商代码 '{vendor_code}' 未找到")
+        vendor_data = VendorResponse.model_validate(vendor)
+        vendor_data.device_count = await self.device_dao.count(vendor_id=vendor.id)
+        vendor_data.command_count = await self.vendor_command_dao.count(vendor_id=vendor.id)
+        return vendor_data
+
+    @log_query_with_context("vendor")
+    async def get_all_vendors(self, operation_context: OperationContext) -> list[VendorResponse]:
+        """获取所有厂商列表（用于下拉选择等）"""
+        vendors = await self.dao.get_all(is_deleted=False)
+        vendor_responses = []
+        for vendor in vendors:
+            vendor_data = VendorResponse.model_validate(vendor)
+            vendor_data.device_count = await self.device_dao.count(vendor_id=vendor.id)
+            vendor_data.command_count = await self.vendor_command_dao.count(vendor_id=vendor.id)
+            vendor_responses.append(vendor_data)
+        return vendor_responses
+
+    @log_query_with_context("vendor")
+    async def get_vendors_with_devices(self, operation_context: OperationContext) -> list[VendorResponse]:
+        """获取包含设备信息的厂商列表"""
+        vendors = await self.dao.get_vendors_with_devices()
+        vendor_responses = []
+        for vendor in vendors:
+            vendor_data = VendorResponse.model_validate(vendor)
+            vendor_data.device_count = len(getattr(vendor, "devices", []))
+            vendor_data.command_count = await self.vendor_command_dao.count(vendor_id=vendor.id)
+            vendor_responses.append(vendor_data)
+        return vendor_responses
