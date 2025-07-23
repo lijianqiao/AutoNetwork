@@ -21,7 +21,7 @@ class QueryTemplate(BaseModel):
     description = fields.TextField(null=True, description="描述")
     is_active = fields.BooleanField(default=True, description="是否启用")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "query_templates"
         table_description = "查询模板表"
         indexes = [

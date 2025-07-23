@@ -26,7 +26,7 @@ class QueryHistory(BaseModel):
     status = fields.CharField(max_length=20, description="状态 (success, partial, failed)")
     error_message = fields.TextField(null=True, description="错误信息")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "query_histories"
         table_description = "查询历史表"
         indexes = [

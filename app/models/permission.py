@@ -25,7 +25,7 @@ class Permission(BaseModel):
     # 描述字段
     description = fields.TextField(null=True, description="描述")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "permissions"
         table_description = "权限表"
         indexes = [

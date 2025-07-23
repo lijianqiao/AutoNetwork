@@ -41,7 +41,7 @@ class User(BaseModel):
     # 描述字段
     description = fields.TextField(null=True, description="描述")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "users"
         table_description = "用户表"
         indexes = [

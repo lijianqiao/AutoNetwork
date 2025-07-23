@@ -146,7 +146,22 @@ class Settings(BaseSettings):
             },
             "apps": {
                 "models": {
-                    "models": ["app.models", "aerich.models"],
+                    "models": [
+                        # 基础模型，无外键依赖
+                        "app.models.user",
+                        "app.models.role",
+                        "app.models.permission",
+                        "app.models.operation_log",
+                        "app.models.region",
+                        "app.models.vendor",
+                        "app.models.query_template",
+                        # 有外键依赖的模型
+                        "app.models.device",
+                        "app.models.vendor_command",
+                        "app.models.device_config",
+                        "app.models.query_history",
+                        "aerich.models",
+                    ],
                     "default_connection": "default",
                 }
             },

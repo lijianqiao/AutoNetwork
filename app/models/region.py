@@ -21,7 +21,7 @@ class Region(BaseModel):
     snmp_community = fields.CharField(max_length=200, description="SNMP社区字符串 (加密存储)")
     description = fields.TextField(null=True, description="描述")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "regions"
         table_description = "基地表"
         indexes = [

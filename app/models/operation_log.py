@@ -39,7 +39,7 @@ class OperationLog(BaseModel):
     # 描述字段
     description = fields.TextField(null=True, description="描述")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "operation_logs"
         table_description = "操作日志表"
         indexes = [

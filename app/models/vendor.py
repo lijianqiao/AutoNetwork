@@ -25,7 +25,7 @@ class Vendor(BaseModel):
     connection_timeout = fields.IntField(default=30, description="连接超时(秒)")
     command_timeout = fields.IntField(default=10, description="命令超时(秒)")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "vendors"
         table_description = "厂商表"
         indexes = [

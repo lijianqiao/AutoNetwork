@@ -25,7 +25,7 @@ class DeviceConfig(BaseModel):
     )
     backup_reason = fields.TextField(null=True, description="备份原因")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "device_configs"
         table_description = "设备配置快照表"
         indexes = [

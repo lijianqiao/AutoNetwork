@@ -24,7 +24,7 @@ class VendorCommand(BaseModel):
     parser_type = fields.CharField(max_length=50, description="解析器类型 (textfsm, regex, raw)")
     parser_template = fields.TextField(description="解析模板内容")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "vendor_commands"
         table_description = "厂商命令表"
         indexes = [

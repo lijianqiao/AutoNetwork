@@ -27,7 +27,7 @@ class Role(BaseModel):
     # 描述字段
     description = fields.TextField(null=True, description="描述")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "roles"
         table_description = "角色表"
         indexes = [

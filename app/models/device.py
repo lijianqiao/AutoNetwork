@@ -36,7 +36,7 @@ class Device(BaseModel):
     is_active = fields.BooleanField(default=True, description="是否在用")
     last_connected_at = fields.DatetimeField(null=True, description="最后连接时间")
 
-    class Meta(BaseModel.Meta):
+    class Meta:  # type: ignore
         table = "devices"
         table_description = "网络设备表"
         indexes = [
