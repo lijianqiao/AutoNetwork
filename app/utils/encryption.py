@@ -95,7 +95,7 @@ class EncryptionManager:
             decrypted_bytes = self.fernet.decrypt(encrypted_bytes)
             return decrypted_bytes.decode("utf-8")
         except Exception as e:
-            logger.error(f"解密失败: {e}")
+            # 不记录错误日志，因为可能是明文密码导致的正常解密失败
             raise ValueError(f"解密失败: {e}") from e
 
     def encrypt_if_not_empty(self, plaintext: str | None) -> str | None:
