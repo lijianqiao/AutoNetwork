@@ -214,7 +214,7 @@ class BaseImportExportService(ABC):
     async def _create_csv_template(self) -> str:
         """创建CSV导入模板"""
         headers = self._build_headers(include_required_mark=True)
-        df = pd.DataFrame(columns=headers)
+        df = pd.DataFrame(data=None, columns=pd.Index(headers))
 
         # 添加示例数据
         example_data = await self._get_example_data()
@@ -254,7 +254,7 @@ class BaseImportExportService(ABC):
             row = await self._convert_model_to_export_row(item)
             rows.append(row)
 
-        df = pd.DataFrame(rows, columns=headers)
+        df = pd.DataFrame(rows, columns=pd.Index(headers))
 
         # 创建临时文件
         filepath = self._create_temp_file(".xlsx", f"{self.config.model_name}_export_")
@@ -285,7 +285,7 @@ class BaseImportExportService(ABC):
             row = await self._convert_model_to_export_row(item)
             rows.append(row)
 
-        df = pd.DataFrame(rows, columns=headers)
+        df = pd.DataFrame(rows, columns=pd.Index(headers))
 
         # 创建临时文件
         filepath = self._create_temp_file(".csv", f"{self.config.model_name}_export_")
@@ -361,7 +361,18 @@ class BaseImportExportService(ABC):
                     df = excel_file.parse(0)
 
             # 文件已在with语句中关闭，现在可以安全返回数据
-            return df
+            # 确保返回的是DataFrame类型
+            if isinstance(df, pd.DataFrame):
+                return df
+            elif isinstance(df, dict):
+                # 如果是字典类型，返回第一个DataFrame
+                first_df = next(iter(df.values()))
+                if isinstance(first_df, pd.DataFrame):
+                    return first_df
+                else:
+                    raise BusinessException("无法获取有效的DataFrame数据")
+            else:
+                raise BusinessException("无法获取有效的DataFrame数据")
         except Exception as e:
             logger.error(f"读取Excel文件失败，文件路径: {file_path}")
             raise BusinessException(f"读取Excel文件失败: {e}") from e
@@ -416,7 +427,7 @@ class BaseImportExportService(ABC):
             for field in self.config.main_fields + self.config.foreign_key_fields:
                 if field.is_required:
                     value = row.get(field.display_name)
-                    if pd.isna(value) or str(value).strip() == "":
+                    if pd.isna(value) or str(value).strip() == "":  # pyright: ignore[reportGeneralTypeIssues]
                         row_errors.append(f"第{row_number}行：{field.display_name} 为必填字段")
 
             # 字段格式验证

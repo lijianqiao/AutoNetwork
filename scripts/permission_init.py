@@ -47,6 +47,7 @@ class PermissionInitializer:
             "query_history": "查询历史",
             "device_config": "设备配置",
             "network_query": "网络查询",
+            "import_export": "导入导出",
         }
 
         # 操作名称映射
@@ -75,6 +76,11 @@ class PermissionInitializer:
             "interface": "接口状态查询",
             "custom": "自定义命令查询",
             "template_list": "查询模板列表",
+            "import": "导入",
+            "export": "导出",
+            "device_template": "设备导入模板",
+            "device_import": "设备数据导入",
+            "device_export": "设备数据导出",
         }
 
         # 特殊权限名称覆盖（用于处理无法通过规则生成的特殊情况）
@@ -161,6 +167,13 @@ class PermissionInitializer:
                     Permissions.LOG_VIEW,
                     Permissions.ADMIN_READ,
                     Permissions.ADMIN_WRITE,
+                    Permissions.IMPORT_EXPORT_ACCESS,
+                    Permissions.IMPORT_EXPORT_TEMPLATE_LIST,
+                    Permissions.IMPORT_EXPORT_IMPORT,
+                    Permissions.IMPORT_EXPORT_EXPORT,
+                    Permissions.IMPORT_EXPORT_DEVICE_TEMPLATE,
+                    Permissions.IMPORT_EXPORT_DEVICE_IMPORT,
+                    Permissions.IMPORT_EXPORT_DEVICE_EXPORT,
                 ],
             },
             {
@@ -189,6 +202,13 @@ class PermissionInitializer:
                     Permissions.NETWORK_QUERY_EXECUTE,
                     Permissions.QUERY_HISTORY_ACCESS,
                     Permissions.QUERY_HISTORY_READ,
+                    Permissions.IMPORT_EXPORT_ACCESS,
+                    Permissions.IMPORT_EXPORT_TEMPLATE_LIST,
+                    Permissions.IMPORT_EXPORT_IMPORT,
+                    Permissions.IMPORT_EXPORT_EXPORT,
+                    Permissions.IMPORT_EXPORT_DEVICE_TEMPLATE,
+                    Permissions.IMPORT_EXPORT_DEVICE_IMPORT,
+                    Permissions.IMPORT_EXPORT_DEVICE_EXPORT,
                 ],
             },
             {
@@ -318,14 +338,46 @@ class PermissionInitializer:
 # 提供便捷的初始化函数
 async def init_permission_system():
     """智能初始化权限系统的便捷函数"""
-    initializer = PermissionInitializer()
-    await initializer.initialize_all()
+    from app.db import close_database, init_database
+
+    try:
+        # 初始化数据库连接
+        await init_database()
+        logger.info("数据库连接初始化成功")
+
+        # 执行权限初始化
+        initializer = PermissionInitializer()
+        await initializer.initialize_all()
+
+    except Exception as e:
+        logger.error(f"权限系统初始化失败: {e}")
+        raise
+    finally:
+        # 关闭数据库连接
+        await close_database()
+        logger.info("数据库连接已关闭")
 
 
 async def sync_permissions_only():
     """智能同步权限的便捷函数"""
-    initializer = PermissionInitializer()
-    await initializer.sync_permissions()
+    from app.db import close_database, init_database
+
+    try:
+        # 初始化数据库连接
+        await init_database()
+        logger.info("数据库连接初始化成功")
+
+        # 执行权限同步
+        initializer = PermissionInitializer()
+        await initializer.sync_permissions()
+
+    except Exception as e:
+        logger.error(f"权限同步失败: {e}")
+        raise
+    finally:
+        # 关闭数据库连接
+        await close_database()
+        logger.info("数据库连接已关闭")
 
 
 # 如果直接运行此脚本，则执行初始化
