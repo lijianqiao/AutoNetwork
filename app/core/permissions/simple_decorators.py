@@ -482,6 +482,12 @@ class Permissions:
     IMPORT_EXPORT_DEVICE_IMPORT = "import_export:device_import"
     IMPORT_EXPORT_DEVICE_EXPORT = "import_export:device_export"
 
+    # 设备认证管理
+    AUTHENTICATION_ACCESS = "authentication:access"
+    AUTHENTICATION_READ = "authentication:read"
+    AUTHENTICATION_MANAGE = "authentication:manage"
+    AUTHENTICATION_TEST = "authentication:test"
+
 
 # ===== 向后兼容函数 =====
 

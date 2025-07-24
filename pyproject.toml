@@ -13,6 +13,7 @@ authors = [{ name = "lijianqiao", email = "lijianqiao2906@live.com" }]
 dependencies = [
     "aerich>=0.9.1",
     "asyncpg>=0.30.0",
+    "cryptography>=45.0.5",
     "fastapi-throttle>=0.1.6",
     "fastapi[standard]>=0.115.12",
     "itsdangerous>=2.2.0",

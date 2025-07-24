@@ -12,6 +12,7 @@ from app.api.v1 import (
     admin_dashboard,
     admin_routes,
     auth,
+    authentication,
     device_configs,
     devices,
     import_export,
@@ -33,6 +34,7 @@ api_router = APIRouter()
 
 # 注册各模块路由
 api_router.include_router(auth.router, tags=["认证管理"])
+api_router.include_router(authentication.router, tags=["设备认证管理"])
 api_router.include_router(users.router, tags=["用户管理"])
 api_router.include_router(roles.router, tags=["角色管理"])
 api_router.include_router(permissions.router, tags=["权限管理"])

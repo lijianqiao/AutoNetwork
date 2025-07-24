@@ -101,6 +101,7 @@ class Settings(BaseSettings):
 
     # 安全配置
     SECRET_KEY: str = "your-secret-key"
+    ENCRYPTION_KEY: str | None = None  # AES加密密钥，如果为空则使用SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     ALGORITHM: str = Field(default="HS256")
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
