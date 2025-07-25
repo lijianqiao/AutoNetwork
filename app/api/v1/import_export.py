@@ -70,7 +70,9 @@ async def generate_device_template(
 ):
     """生成设备导入模板"""
     try:
-        template_path = await service.generate_device_template(file_format, operation_context)
+        template_path = await service.generate_device_template(
+            file_format=file_format, operation_context=operation_context
+        )
 
         # 返回文件下载，自动清理临时文件
         filename = f"设备导入模板.{file_format}"
@@ -108,7 +110,9 @@ async def import_devices(
                 temp_file.write(content)
 
             # 执行导入
-            result = await service.import_device_data(temp_path, update_existing, operation_context)
+            result = await service.import_device_data(
+                file_path=temp_path, update_existing=update_existing, operation_context=operation_context
+            )
 
             return {
                 "message": "导入完成",
@@ -143,7 +147,9 @@ async def export_devices(
         devices = await device_dao.get_all(include_deleted=False)  # 获取所有未删除的设备数据
 
         # 执行导出
-        export_path = await service.export_device_data(devices, file_format, operation_context)
+        export_path = await service.export_device_data(
+            devices=devices, file_format=file_format, operation_context=operation_context
+        )
 
         # 返回文件下载，自动清理临时文件
         filename = f"设备数据导出.{file_format}"

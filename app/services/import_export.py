@@ -25,7 +25,7 @@ class ImportExportService:
         self.device_import_export = DeviceImportExportService()
 
     @log_query_with_context("import_export")
-    async def generate_device_template(self, file_format: str, operation_context: OperationContext) -> str:
+    async def generate_device_template(self, *, file_format: str, operation_context: OperationContext) -> str:
         """生成设备导入模板"""
         try:
             if file_format not in ["xlsx", "csv"]:
@@ -40,7 +40,7 @@ class ImportExportService:
 
     @log_create_with_context("import_export")
     async def import_device_data(
-        self, file_path: str, update_existing: bool, operation_context: OperationContext
+        self, *, file_path: str, update_existing: bool, operation_context: OperationContext
     ) -> dict[str, Any]:
         """导入设备数据"""
         try:
@@ -59,7 +59,7 @@ class ImportExportService:
 
     @log_query_with_context("import_export")
     async def export_device_data(
-        self, devices: list[Any], file_format: str, operation_context: OperationContext
+        self, *, devices: list[Any], file_format: str, operation_context: OperationContext
     ) -> str:
         """导出设备数据"""
         try:
