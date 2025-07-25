@@ -52,6 +52,9 @@ async def startup(app: FastAPI) -> None:
     # 初始化权限缓存
     await init_permission_cache()
 
+    # 初始化设备连接池
+    await init_device_connection_pool()
+
     logger.info(f"应用程序 {settings.APP_NAME} 启动完成")
 
 
@@ -65,6 +68,9 @@ async def shutdown(app: FastAPI) -> None:
 
     # 关闭数据库连接
     await close_db()
+
+    # 关闭设备连接池
+    await close_device_connection_pool()
 
     # 关闭Redis连接
     await clear_all_permission_cache()  # 清除权限缓存
@@ -159,3 +165,35 @@ async def init_permission_cache() -> None:
     except Exception as e:
         logger.error(f"权限缓存系统初始化失败: {e}")
         logger.info("将使用内存缓存作为备用方案")
+
+
+async def init_device_connection_pool() -> None:
+    """初始化设备连接池"""
+    try:
+        logger.info("正在初始化设备连接池...")
+        from app.core.network import get_connection_pool
+
+        # 获取全局连接池实例
+        pool = await get_connection_pool()
+        await pool.start()
+
+        logger.info("设备连接池初始化完成")
+
+    except Exception as e:
+        logger.error(f"设备连接池初始化失败: {e}")
+        logger.info("设备连接池将在首次使用时延迟初始化")
+
+
+async def close_device_connection_pool() -> None:
+    """关闭设备连接池"""
+    try:
+        logger.info("正在关闭设备连接池...")
+        from app.core.network import close_connection_pool
+
+        # 关闭全局连接池
+        await close_connection_pool()
+
+        logger.info("设备连接池已关闭")
+
+    except Exception as e:
+        logger.error(f"关闭设备连接池时出错: {e}")

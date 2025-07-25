@@ -6,7 +6,6 @@
 @Docs: 网络查询服务层 - 使用操作上下文依赖注入
 """
 
-import asyncio
 import time
 from typing import Any
 from uuid import UUID, uuid4
@@ -31,6 +30,7 @@ from app.schemas.network_query import (
     NetworkQueryTemplateListRequest,
     NetworkQueryTemplateListResponse,
 )
+from app.services.device_connection import DeviceConnectionService
 from app.services.query_history import QueryHistoryService
 from app.utils.deps import OperationContext
 from app.utils.logger import logger
@@ -46,6 +46,7 @@ class NetworkQueryService:
         self.vendor_command_dao = VendorCommandDAO()
         self.query_history_dao = QueryHistoryDAO()
         self.query_history_service = QueryHistoryService()
+        self.connection_service = DeviceConnectionService()
 
     @log_query_with_context("network_query")
     async def execute_query(
@@ -56,8 +57,12 @@ class NetworkQueryService:
         query_id = str(uuid4())
 
         try:
-            # 获取目标设备
-            devices = await self.device_dao.get_by_ids(request.target_devices)
+            # 获取目标设备（包含vendor关系）
+            devices = []
+            for device_id in request.target_devices:
+                device = await self.device_dao.get_with_related(device_id, select_related=["vendor"])
+                if device:
+                    devices.append(device)
             if not devices:
                 raise BusinessException("没有找到指定的设备")
 
@@ -137,8 +142,10 @@ class NetworkQueryService:
             # 模拟按IP查询（实际应该调用网络查询引擎）
             for ip_address in request.target_ips:
                 try:
-                    # 尝试从数据库查找设备
+                    # 尝试从数据库查找设备（包含vendor关系）
                     device = await self.device_dao.get_by_ip_address(ip_address)
+                    if device:
+                        device = await self.device_dao.get_with_related(device.id, select_related=["vendor"])
 
                     result = NetworkQueryResult(
                         device_id=device.id if device else None,
@@ -403,18 +410,21 @@ class NetworkQueryService:
         start_time = time.time()
 
         try:
-            # 这里应该根据查询类型和设备厂商，调用相应的查询逻辑
-            # 暂时返回模拟结果
-            await asyncio.sleep(0.1)  # 模拟网络延迟
+            # 首先测试设备连接
+            connection_test = await self.connection_service.test_device_connection(device.id)
 
-            result_data = {
-                "query_type": request.query_type,
-                "device_info": {
-                    "hostname": device.hostname,
-                    "vendor": device.vendor.vendor_name if hasattr(device, "vendor") and device.vendor else "Unknown",
-                },
-                "status": "success",
-            }
+            if not connection_test["success"]:
+                return NetworkQueryResult(
+                    device_id=device.id,
+                    hostname=device.hostname,
+                    ip_address=device.ip_address,
+                    success=False,
+                    error_message=f"设备连接失败: {connection_test.get('error_message', '未知错误')}",
+                    execution_time=time.time() - start_time,
+                )
+
+            # 根据查询类型执行相应的命令
+            result_data = await self._execute_query_commands(device, request)
 
             return NetworkQueryResult(
                 device_id=device.id,
@@ -426,6 +436,7 @@ class NetworkQueryService:
             )
 
         except Exception as e:
+            logger.error(f"设备 {device.hostname} 查询执行失败: {e}")
             return NetworkQueryResult(
                 device_id=device.id,
                 hostname=device.hostname,
@@ -434,6 +445,70 @@ class NetworkQueryService:
                 error_message=str(e),
                 execution_time=time.time() - start_time,
             )
+
+    async def _execute_query_commands(self, device: Any, request: NetworkQueryRequest) -> dict[str, Any]:
+        """执行查询命令"""
+        try:
+            # 根据查询类型获取相应的命令模板
+            templates = await self.query_template_dao.get_by_template_type(request.query_type)
+            if not templates:
+                raise BusinessException(f"未找到查询类型 {request.query_type} 的模板")
+            template = templates[0]  # 使用第一个匹配的模板
+
+            # 获取设备厂商对应的命令
+            vendor_command = await self.vendor_command_dao.get_by_template_and_vendor(template.id, device.vendor_id)
+            if not vendor_command:
+                raise BusinessException(f"未找到厂商 {device.vendor.vendor_name} 的查询命令")
+
+            # 执行命令
+            commands = (
+                vendor_command.commands if isinstance(vendor_command.commands, list) else [vendor_command.commands]
+            )
+            command_results = []
+
+            for command in commands:
+                try:
+                    # 使用设备连接服务执行命令
+                    response = await self.connection_service.execute_command(device.id, command)
+                    command_results.append(
+                        {
+                            "command": command,
+                            "success": response["success"],
+                            "output": response.get("output", ""),
+                            "elapsed_time": response.get("elapsed_time", 0.0),
+                        }
+                    )
+                except Exception as cmd_error:
+                    logger.error(f"命令 {command} 执行失败: {cmd_error}")
+                    command_results.append(
+                        {
+                            "command": command,
+                            "success": False,
+                            "error": str(cmd_error),
+                            "elapsed_time": 0.0,
+                        }
+                    )
+
+            return {
+                "query_type": request.query_type,
+                "device_info": {
+                    "hostname": device.hostname,
+                    "vendor": device.vendor.vendor_name if hasattr(device, "vendor") and device.vendor else "Unknown",
+                    "platform": device.platform if hasattr(device, "platform") else "Unknown",
+                },
+                "template_info": {
+                    "template_name": template.template_name,
+                    "template_type": template.template_type,
+                },
+                "command_results": command_results,
+                "total_commands": len(commands),
+                "successful_commands": sum(1 for result in command_results if result["success"]),
+                "status": "success",
+            }
+
+        except Exception as e:
+            logger.error(f"执行查询命令失败: {e}")
+            raise
 
     async def _save_query_history(
         self,

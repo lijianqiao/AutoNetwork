@@ -100,6 +100,18 @@ def get_import_export_service():
     return ImportExportService()
 
 
+def get_network_query_service():
+    from app.services.network_query import NetworkQueryService
+
+    return NetworkQueryService()
+
+
+def get_device_connection_service():
+    from app.services.device_connection import DeviceConnectionService
+
+    return DeviceConnectionService()
+
+
 def get_security_manager() -> SecurityManager:
     return security_manager
 

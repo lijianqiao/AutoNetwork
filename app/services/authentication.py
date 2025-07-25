@@ -15,6 +15,7 @@ from app.dao.vendor import VendorDAO
 from app.models.device import Device
 from app.models.region import Region
 from app.models.vendor import Vendor
+from app.utils.encryption import decrypt_text
 from app.utils.logger import logger
 
 
@@ -49,9 +50,9 @@ class AuthenticationManager:
 
         # 用户名生成规则配置
         self.username_patterns = {
-            "access": "{region_code}_access_admin",  # 接入层
-            "aggregation": "{region_code}_agg_admin",  # 汇聚层
-            "core": "{region_code}_core_admin",  # 核心层
+            "access": "op{region_code}jr",  # 接入层
+            "aggregation": "op{region_code}jr",  # 汇聚层
+            "core": "op{region_code}jr",  # 核心层
         }
 
         # 动态密码输入缓存（仅在会话期间有效）
@@ -141,26 +142,11 @@ class AuthenticationManager:
         # 生成动态用户名
         username = self._generate_dynamic_username(device, region)
 
-        # 智能解密SNMP社区字符串（兼容明文和加密格式）
-        snmp_community = region.snmp_community
-        if snmp_community and snmp_community.strip():
-            try:
-                from app.utils.encryption import decrypt_text
-
-                # 尝试解密SNMP社区字符串
-                test_decrypted_snmp = decrypt_text(region.snmp_community)
-                snmp_community = test_decrypted_snmp
-                logger.debug(f"基地 {region.region_name} 的SNMP社区字符串已成功解密")
-            except Exception:
-                # 解密失败，认为是明文
-                logger.debug(f"基地 {region.region_name} 的SNMP社区字符串使用明文")
-                snmp_community = region.snmp_community
-
         return DeviceCredentials(
             username=username,
-            password=dynamic_password,
+            password=dynamic_password,  # 直接使用动态密码
             auth_type="dynamic",
-            snmp_community=snmp_community,
+            snmp_community=region.snmp_community,  # 直接使用SNMP社区字符串
             ssh_port=device.ssh_port,
         )
 
@@ -193,40 +179,23 @@ class AuthenticationManager:
                 },
             )
 
-        # 智能解密静态密码（兼容明文和加密密码）
-        decrypted_password = device.static_password
-
         # 检查密码是否为空
-        if not decrypted_password or decrypted_password.strip() == "":
+        if not device.static_password or device.static_password.strip() == "":
             raise BusinessException(f"设备 {device.hostname} 的静态密码为空")
 
-        # 尝试解密，如果失败则认为是明文密码
+        # 解密静态凭据
         try:
-            from app.utils.encryption import decrypt_text
-
-            # 直接尝试解密，不使用decrypt_if_not_empty
-            test_decrypted = decrypt_text(device.static_password)
-            decrypted_password = test_decrypted
+            decrypted_password = decrypt_text(device.static_password)
             logger.debug(f"设备 {device.hostname} 的密码已成功解密")
-        except Exception:
-            # 解密失败，认为是明文密码
-            logger.warning(f"设备 {device.hostname} 的密码解密失败，使用明文密码")
-            decrypted_password = device.static_password
 
-        # 智能解密SNMP社区字符串（兼容明文和加密格式）
-        snmp_community = region.snmp_community
-        if snmp_community and snmp_community.strip():
-            try:
-                from app.utils.encryption import decrypt_text
-
-                # 尝试解密SNMP社区字符串
-                test_decrypted_snmp = decrypt_text(region.snmp_community)
-                snmp_community = test_decrypted_snmp
+            snmp_community = region.snmp_community
+            if snmp_community and snmp_community.strip():
+                snmp_community = decrypt_text(snmp_community)
                 logger.debug(f"基地 {region.region_name} 的SNMP社区字符串已成功解密")
-            except Exception:
-                # 解密失败，认为是明文
-                logger.debug(f"基地 {region.region_name} 的SNMP社区字符串使用明文")
-                snmp_community = region.snmp_community
+
+        except Exception as e:
+            logger.error(f"解密静态凭据失败: device={device.hostname}, error={e}")
+            raise BusinessException(f"设备 {device.hostname} 的静态凭据解密失败") from e
 
         return DeviceCredentials(
             username=device.static_username,

@@ -72,8 +72,7 @@ class EncryptionManager:
             return ""
 
         try:
-            encrypted_bytes = self.fernet.encrypt(plaintext.encode("utf-8"))
-            return base64.urlsafe_b64encode(encrypted_bytes).decode("utf-8")
+            return self.fernet.encrypt(plaintext.encode("utf-8")).decode("utf-8")
         except Exception as e:
             logger.error(f"加密失败: {e}")
             raise ValueError(f"加密失败: {e}") from e
@@ -91,8 +90,7 @@ class EncryptionManager:
             return ""
 
         try:
-            encrypted_bytes = base64.urlsafe_b64decode(encrypted_text.encode("utf-8"))
-            decrypted_bytes = self.fernet.decrypt(encrypted_bytes)
+            decrypted_bytes = self.fernet.decrypt(encrypted_text.encode("utf-8"))
             return decrypted_bytes.decode("utf-8")
         except Exception as e:
             # 不记录错误日志，因为可能是明文密码导致的正常解密失败
