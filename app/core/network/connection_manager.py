@@ -271,7 +271,7 @@ class DeviceConnectionManager:
             # 确定Scrapli平台
             platform = self._get_scrapli_platform(vendor)
 
-            # 创建Scrapli连接配置
+            # 创建优化的Scrapli连接配置
             scrapli_config = {
                 "host": device.ip_address,
                 "auth_username": credentials.username,
@@ -282,19 +282,16 @@ class DeviceConnectionManager:
                 "timeout_transport": network_config.connection.CONNECT_TIMEOUT,
                 "port": credentials.ssh_port,
                 "platform": platform,
-                "transport": "asyncssh",  # 使用asyncssh传输层，支持跨平台
+                "transport": "asyncssh",  # 使用asyncssh传输层
                 "timeout_ops": network_config.connection.COMMAND_TIMEOUT,
-                # "transport_options": {
-                #     "known_hosts": None,  # 禁用known_hosts检查
-                #     "server_host_key_algs": [],  # 禁用服务器主机密钥算法检查
-                #     "client_keys": [],  # 不使用客户端密钥
-                # },
-                "channel_log": network_config.security.LOG_SENSITIVE_INFO,
-                "channel_log_mode": "write" if network_config.security.LOG_SENSITIVE_INFO else None,
+                "transport_options": {
+                    "known_hosts": None,  # 禁用known_hosts检查，提高连接速度
+                    "server_host_key_algs": [],  # 禁用服务器主机密钥算法检查
+                    "client_keys": [],  # 不使用客户端密钥
+                    "compression_algs": [],  # 禁用压缩，减少CPU开销
+                },
             }
 
-            # 移除None值
-            scrapli_config = {k: v for k, v in scrapli_config.items() if v is not None}
             scrapli_conn = AsyncScrapli(**scrapli_config)
 
             # 创建设备连接对象
@@ -483,9 +480,10 @@ class DeviceConnectionManager:
         }
 
     async def test_connection(self, device: Device, dynamic_password: str | None = None) -> dict[str, Any]:
-        """测试设备连接"""
+        """测试设备连接 - 优化版本，减少不必要操作"""
         start_time = datetime.now()
         platform = None
+        vendor = None
 
         try:
             # 获取厂商信息用于平台识别
@@ -496,29 +494,17 @@ class DeviceConnectionManager:
             # 获取连接
             connection = await self.get_connection(device, dynamic_password, force_reconnect=True)
 
-            # 尝试连接
+            # 尝试连接并执行测试命令
             if await connection.connect():
-                # 执行简单命令测试
                 try:
-                    # 根据平台选择合适的测试命令
-                    test_commands = {
-                        "hp_comware": "display version",
-                        "huawei_vrp": "display version",
-                        "cisco_iosxe": "show version",
-                        "juniper_junos": "show version",
-                        "arista_eos": "show version",
-                        "nokia_sros": "show version",
-                    }
-                    test_cmd = test_commands.get(platform or "generic", "show version")
+                    # 使用最优轻量测试命令，减少超时时间
+                    test_cmd = self._get_optimal_test_command(platform)
+                    response = await connection.execute_command(test_cmd, timeout=3)  # 减少超时时间
 
-                    response = await connection.execute_command(test_cmd, timeout=10)
                     success = True
                     error_message = None
-                    response_data = response.result if hasattr(response, "result") else str(response)
-
-                    # 更新设备最后连接时间
-                    device.last_connected_at = datetime.now()
-                    await device.save()
+                    # 不返回完整响应数据，减少传输开销
+                    response_data = "连接测试成功" if response else None
 
                 except Exception as cmd_error:
                     success = False
@@ -529,10 +515,11 @@ class DeviceConnectionManager:
                 error_message = "连接建立失败"
                 response_data = None
 
-            # 关闭测试连接
-            await self.close_connection(device.id)
-
             execution_time = (datetime.now() - start_time).total_seconds()
+
+            # 异步更新设备最后连接时间（不等待完成）
+            if success:
+                asyncio.create_task(self._update_device_last_connected(device.id))
 
             return {
                 "success": success,
@@ -572,9 +559,15 @@ class DeviceConnectionManager:
                 "connection_info": {
                     "ssh_port": device.ssh_port,
                     "auth_type": device.auth_type,
-                    "vendor_code": None,
+                    "vendor_code": vendor.vendor_code if vendor else None,
                 },
             }
+        finally:
+            # 确保连接被关闭
+            try:
+                await self.close_connection(device.id)
+            except Exception:
+                pass  # 忽略关闭连接时的错误
 
     async def execute_device_command(
         self, device: Device, command: str, dynamic_password: str | None = None, timeout: int | None = None
@@ -619,13 +612,47 @@ class DeviceConnectionManager:
                 },
             }
 
+    def _get_optimal_test_command(self, platform: str | None) -> str:
+        """根据平台获取最优的轻量测试命令"""
+        test_commands = {
+            "hp_comware": "display clock",
+            "huawei_vrp": "display clock",
+            "cisco_iosxe": "show clock",
+            "cisco_ios": "show clock",
+            "cisco_nxos": "show clock",
+            "juniper_junos": "show system uptime | display terse",
+            "arista_eos": "show clock",
+            "nokia_sros": "show time",
+            "extreme_exos": "show time",
+            "mikrotik_routeros": "system clock print",
+            "vyos": "show date",
+            "linux": "date",
+            "generic": "show clock",
+        }
+        return test_commands.get(platform or "generic", "show clock")
+
+    async def _update_device_last_connected(self, device_id: UUID) -> None:
+        """异步更新设备最后连接时间"""
+        try:
+            from app.dao.device import DeviceDAO
+
+            device_dao = DeviceDAO()
+            await device_dao.update_last_connected(device_id)
+            logger.debug(f"已更新设备 {device_id} 的最后连接时间")
+        except Exception as e:
+            logger.warning(f"更新设备最后连接时间失败: {e}")
+
     async def test_connection_stability(
         self, device: Device, dynamic_password: str | None = None, duration: int | None = None
     ) -> dict[str, Any]:
         """测试连接稳定性"""
         test_duration = duration or network_config.connection_pool.STABILITY_TEST_DURATION
         test_interval = network_config.connection_pool.STABILITY_TEST_INTERVAL
-        test_command = network_config.connection_pool.STABILITY_TEST_COMMAND
+
+        # 获取设备厂商信息用于选择最优测试命令
+        vendor = await device.vendor
+        platform = self._get_scrapli_platform(vendor) if vendor else None
+        test_command = self._get_optimal_test_command(platform)
 
         start_time = datetime.now()
         test_results = []

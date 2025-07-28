@@ -51,8 +51,8 @@ class AuthenticationManager:
         # 用户名生成规则配置
         self.username_patterns = {
             "access": "op{region_code}jr",  # 接入层
-            "aggregation": "op{region_code}jr",  # 汇聚层
-            "core": "op{region_code}jr",  # 核心层
+            "aggregation": "op{region_code}hj",  # 汇聚层
+            "core": "op{region_code}hx",  # 核心层
         }
 
         # 动态密码输入缓存（仅在会话期间有效）
@@ -183,19 +183,25 @@ class AuthenticationManager:
         if not device.static_password or device.static_password.strip() == "":
             raise BusinessException(f"设备 {device.hostname} 的静态密码为空")
 
-        # 解密静态凭据
+        # 解密静态凭据（兼容明文和加密密码）
         try:
+            # 尝试解密密码
             decrypted_password = decrypt_text(device.static_password)
             logger.debug(f"设备 {device.hostname} 的密码已成功解密")
+        except Exception:
+            # 如果解密失败，可能是明文密码，直接使用
+            decrypted_password = device.static_password
+            logger.debug(f"设备 {device.hostname} 使用明文密码")
 
-            snmp_community = region.snmp_community
-            if snmp_community and snmp_community.strip():
+        # 处理SNMP社区字符串
+        snmp_community = region.snmp_community
+        if snmp_community and snmp_community.strip():
+            try:
                 snmp_community = decrypt_text(snmp_community)
                 logger.debug(f"基地 {region.region_name} 的SNMP社区字符串已成功解密")
-
-        except Exception as e:
-            logger.error(f"解密静态凭据失败: device={device.hostname}, error={e}")
-            raise BusinessException(f"设备 {device.hostname} 的静态凭据解密失败") from e
+            except Exception:
+                # 如果解密失败，可能是明文，直接使用
+                logger.debug(f"基地 {region.region_name} 使用明文SNMP社区字符串")
 
         return DeviceCredentials(
             username=device.static_username,

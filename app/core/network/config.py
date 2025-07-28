@@ -60,17 +60,17 @@ class ScrapliPlatformConfig(BaseModel):
 class ConnectionConfig(BaseModel):
     """连接配置"""
 
-    # 连接超时时间（秒）
-    CONNECT_TIMEOUT: int = Field(default=30, ge=5, le=300)
+    # 连接超时时间（秒）- 快速连接测试
+    CONNECT_TIMEOUT: int = Field(default=5, ge=3, le=300)
 
-    # 命令执行超时时间（秒）
-    COMMAND_TIMEOUT: int = Field(default=60, ge=10, le=600)
+    # 命令执行超时时间（秒）- 快速命令执行
+    COMMAND_TIMEOUT: int = Field(default=8, ge=5, le=600)
 
-    # 连接重试次数
-    MAX_RETRY_ATTEMPTS: int = Field(default=3, ge=1, le=10)
+    # 连接重试次数 - 批量测试时不重试，快速失败
+    MAX_RETRY_ATTEMPTS: int = Field(default=1, ge=1, le=10)
 
-    # 重试间隔时间（秒）
-    RETRY_INTERVAL: int = Field(default=5, ge=1, le=60)
+    # 重试间隔时间（秒）- 减少重试间隔，提高测试效率
+    RETRY_INTERVAL: int = Field(default=1, ge=1, le=60)
 
     # SSH连接参数
     SSH_CONFIG_FILE: str | bool | None = Field(default=False)
@@ -92,28 +92,28 @@ class ConnectionConfig(BaseModel):
 class ConnectionPoolConfig(BaseModel):
     """连接池配置"""
 
-    # 连接池大小
-    MAX_POOL_SIZE: int = Field(default=100, ge=10, le=1000)
-    MIN_POOL_SIZE: int = Field(default=5, ge=1, le=50)
+    # 连接池大小 - 适度增加最大连接数，减少最小连接数
+    MAX_POOL_SIZE: int = Field(default=150, ge=10, le=1000)
+    MIN_POOL_SIZE: int = Field(default=3, ge=1, le=50)
 
-    # 连接生命周期（秒）
-    MAX_CONNECTION_LIFETIME: int = Field(default=3600, ge=300, le=86400)  # 1小时
+    # 连接生命周期（秒）- 减少连接生命周期，避免长时间占用
+    MAX_CONNECTION_LIFETIME: int = Field(default=1800, ge=300, le=86400)  # 30分钟
 
-    # 空闲连接超时时间（秒）
-    IDLE_CONNECTION_TIMEOUT: int = Field(default=1800, ge=60, le=7200)  # 30分钟
+    # 空闲连接超时时间（秒）- 减少空闲超时，及时释放资源
+    IDLE_CONNECTION_TIMEOUT: int = Field(default=600, ge=60, le=7200)  # 10分钟
 
-    # 连接健康检查间隔（秒）
-    HEALTH_CHECK_INTERVAL: int = Field(default=300, ge=60, le=1800)  # 5分钟
+    # 连接健康检查间隔（秒）- 增加健康检查频率
+    HEALTH_CHECK_INTERVAL: int = Field(default=180, ge=60, le=1800)  # 3分钟
 
-    # 连接获取超时时间（秒）
-    CONNECTION_ACQUIRE_TIMEOUT: int = Field(default=30, ge=5, le=120)
+    # 连接获取超时时间（秒）- 减少获取超时，快速响应
+    CONNECTION_ACQUIRE_TIMEOUT: int = Field(default=15, ge=5, le=120)
 
-    # 空闲连接清理间隔（秒）
-    CLEANUP_INTERVAL: int = Field(default=600, ge=60, le=3600)  # 10分钟
+    # 空闲连接清理间隔（秒）- 增加清理频率
+    CLEANUP_INTERVAL: int = Field(default=300, ge=60, le=3600)  # 5分钟
 
-    # 连接稳定性测试参数
-    STABILITY_TEST_DURATION: int = Field(default=60, ge=10, le=300)  # 1分钟
-    STABILITY_TEST_INTERVAL: int = Field(default=5, ge=1, le=30)  # 5秒
+    # 连接稳定性测试参数 - 减少测试时间，使用更轻量的测试命令
+    STABILITY_TEST_DURATION: int = Field(default=30, ge=10, le=300)  # 30秒
+    STABILITY_TEST_INTERVAL: int = Field(default=3, ge=1, le=30)  # 3秒
     STABILITY_TEST_COMMAND: str = Field(default="display clock")  # 稳定性测试命令
 
 
@@ -127,10 +127,10 @@ class AuthenticationConfig(BaseModel):
     MAX_CACHED_PASSWORDS: int = Field(default=1000, ge=100, le=10000)
 
     # 认证重试次数
-    AUTH_MAX_RETRY_ATTEMPTS: int = Field(default=2, ge=1, le=5)
+    AUTH_MAX_RETRY_ATTEMPTS: int = Field(default=1, ge=1, le=5)
 
     # 认证超时时间（秒）
-    AUTH_TIMEOUT: int = Field(default=30, ge=10, le=120)
+    AUTH_TIMEOUT: int = Field(default=15, ge=10, le=120)
 
     # 用户名生成规则
     USERNAME_PATTERNS: dict[str, str] = {
@@ -151,20 +151,20 @@ class AuthenticationConfig(BaseModel):
 class ConcurrencyConfig(BaseModel):
     """并发控制配置"""
 
-    # 最大并发连接数
-    MAX_CONCURRENT_CONNECTIONS: int = Field(default=50, ge=5, le=200)
+    # 最大并发连接数 - 高并发批量测试
+    MAX_CONCURRENT_CONNECTIONS: int = Field(default=100, ge=5, le=200)
 
-    # 最大并发查询数
-    MAX_CONCURRENT_QUERIES: int = Field(default=20, ge=5, le=100)
+    # 最大并发查询数 - 优化并发查询数
+    MAX_CONCURRENT_QUERIES: int = Field(default=50, ge=5, le=100)
 
-    # 最大并发认证测试数
-    MAX_CONCURRENT_AUTH_TESTS: int = Field(default=10, ge=1, le=50)
+    # 最大并发认证测试数 - 高并发认证测试
+    MAX_CONCURRENT_AUTH_TESTS: int = Field(default=30, ge=1, le=50)
 
-    # 连接信号量超时时间（秒）
-    SEMAPHORE_TIMEOUT: int = Field(default=60, ge=10, le=300)
+    # 连接信号量超时时间（秒）- 减少信号量超时时间
+    SEMAPHORE_TIMEOUT: int = Field(default=30, ge=10, le=300)
 
-    # 批量操作的默认批次大小
-    DEFAULT_BATCH_SIZE: int = Field(default=10, ge=1, le=50)
+    # 批量操作的默认批次大小 - 增加批次大小，提高批量操作效率
+    DEFAULT_BATCH_SIZE: int = Field(default=20, ge=1, le=50)
 
 
 class MonitoringConfig(BaseModel):

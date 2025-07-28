@@ -34,8 +34,9 @@ class BatchConnectionTestRequest(BaseModel):
     """批量设备连接测试请求"""
 
     device_ids: list[UUID] = Field(..., description="设备ID列表")
-    dynamic_passwords: dict[str, str] | None = Field(None, description="动态密码映射")
-    max_concurrent: int = Field(10, ge=1, le=50, description="最大并发数")
+    dynamic_password: str | None = Field(None, description="统一动态密码（适用于所有动态密码设备）")
+    dynamic_passwords: dict[str, str] | None = Field(None, description="设备特定动态密码映射（优先级高于统一密码）")
+    max_concurrent: int = Field(20, ge=1, le=50, description="最大并发数")
 
 
 class ConnectionStabilityTestRequest(BaseModel):
@@ -69,7 +70,7 @@ class DevicesByCriteriaTestRequest(BaseModel):
     device_type: str | None = Field(None, description="设备类型")
     network_layer: str | None = Field(None, description="网络层级")
     is_active: bool = Field(True, description="是否活跃")
-    max_concurrent: int = Field(10, ge=1, le=50, description="最大并发数")
+    max_concurrent: int = Field(20, ge=1, le=50, description="最大并发数")
 
 
 # 响应模型
@@ -131,14 +132,32 @@ async def test_batch_device_connections(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
 ):
-    """批量测试设备连接"""
+    """批量测试设备连接
+
+    支持两种动态密码模式：
+    1. 统一动态密码：所有动态密码设备使用同一个密码
+    2. 设备特定密码：为特定设备指定不同的密码（优先级更高）
+    静态密码设备会自动从数据库获取凭据
+    """
     try:
         logger.info(f"用户 {current_user.username} 请求批量测试设备连接，设备数量: {len(request.device_ids)}")
 
-        # 转换动态密码映射格式
+        # 智能处理动态密码映射
         dynamic_passwords = None
-        if request.dynamic_passwords:
-            dynamic_passwords = {UUID(device_id): password for device_id, password in request.dynamic_passwords.items()}
+        if request.dynamic_passwords or request.dynamic_password:
+            dynamic_passwords = {}
+
+            # 如果提供了统一动态密码，先为所有设备设置
+            if request.dynamic_password:
+                for device_id in request.device_ids:
+                    dynamic_passwords[device_id] = request.dynamic_password
+
+            # 如果提供了设备特定密码，覆盖对应设备的密码
+            if request.dynamic_passwords:
+                for device_id_str, password in request.dynamic_passwords.items():
+                    device_id = UUID(device_id_str)
+                    if device_id in request.device_ids:
+                        dynamic_passwords[device_id] = password
 
         result = await service.test_batch_device_connections(
             device_ids=request.device_ids,

@@ -1,47 +1,86 @@
-# FastAPI RBAC 后台管理系统
+# 网络自动化平台
 
-基于 FastAPI 的现代化 RBAC 权限管理系统，提供完整的用户、角色、权限管理和操作日志功能。
+基于 FastAPI RBAC 架构扩展的现代化网络自动化平台，提供对大规模、多品牌网络设备的统一管理、查询、配置和监控能力。
 
 ## 🚀 核心特性
 
-- **RBAC 权限模型** - 用户-角色-权限三层权限控制
-- **操作日志系统** - 自动记录用户操作行为
-- **JWT 认证** - 安全的身份验证和授权
-- **依赖注入权限控制** - 基于装饰器的细粒度权限检查
-- **软删除支持** - 数据安全保护，支持恢复
-- **高性能 DAO 层** - 支持批量操作、缓存优化
-- **统一异常处理** - 标准化错误响应
+- **多品牌设备支持** - 统一管理 H3C、华为、思科等主流厂商设备，支持不同厂商的Scrapli平台标识。
+- **高性能并发操作** - 基于 Scrapli 的异步架构，支持对1000+设备的高效并发操作。
+- **智能认证管理** - 支持动态密码（用户手动输入）和静态密码（数据库获取）双重认证模式，包含认证测试和凭据管理。
+- **通用查询引擎** - 通过查询模板和厂商命令映射，实现对不同设备命令输出的标准化查询。
+- **连接池管理** - 智能连接池，支持连接复用、健康检查、自动重连和连接统计。
+- **设备配置管理** - 支持设备配置的备份、快照存储和版本管理。
+- **RBAC 权限集成** - 深度集成现有 RBAC 系统，扩展网络自动化相关权限控制。
+- **自动化操作日志** - 所有关键操作均自动记录，确保安全合规。
 
-## 📁 项目结构
+## 📊 开发进度
 
-```
-app/
-├── main.py                 # 应用入口
-├── core/                   # 核心组件
-│   ├── config.py           # 配置管理
-│   ├── security.py         # JWT 安全管理
-│   ├── permissions/        # 权限系统
-│   │   └── simple_decorators.py  # 权限装饰器
-│   ├── exceptions.py       # 异常处理
-│   └── middleware.py       # 中间件
-├── models/                 # 数据模型
-│   ├── user.py             # 用户模型
-│   ├── role.py             # 角色模型
-│   ├── permission.py       # 权限模型
-│   └── operation_log.py    # 操作日志模型
-├── dao/                    # 数据访问层
-├── services/               # 业务逻辑层
-├── schemas/                # 数据校验层
-├── api/v1/                 # API 接口层
-│   ├── auth.py             # 认证接口
-│   ├── users.py            # 用户管理
-│   ├── roles.py            # 角色管理
-│   ├── permissions.py      # 权限管理
-│   └── operation_logs.py   # 操作日志
-└── utils/                  # 工具函数
-    ├── deps.py             # 依赖注入
-    └── operation_logger.py # 操作日志装饰器
-```
+### ✅ 已完成功能
+
+**第一阶段：核心架构**
+- ✅ 权限系统扩展（网络自动化相关权限）
+- ✅ 数据模型设计（设备、厂商、基地、查询模板等）
+- ✅ DAO层实现（数据访问层）
+- ✅ 服务层实现（业务逻辑层）
+- ✅ API层实现（RESTful接口）
+
+**第二阶段：网络功能**
+- ✅ 设备连接管理（连接池、健康检查）
+- ✅ 认证管理系统（动态/静态认证）
+- ✅ 认证测试功能（单个/批量测试）
+- ✅ 网络查询服务（MAC查询、接口状态、自定义命令）
+- ✅ 查询历史记录
+
+### 🚧 开发中功能
+
+**第三阶段：高级功能**
+- 🔄 CLI 交互终端（WebSocket + Xterm.js）
+- 🔄 配置对比和恢复
+- 🔄 批量操作优化
+
+**第四阶段：扩展功能**
+- 📋 导入导出功能
+- 📋 网络拓扑发现
+- 📋 自动化任务调度
+
+**第五阶段：智能化**
+- 📋 配置合规性检查
+- 📋 智能故障诊断
+- 📋 性能监控和告警
+
+## 🌟 技术特色
+
+### 异步高性能架构
+- **Scrapli 异步连接** - 支持1000+设备并发操作
+- **连接池管理** - 智能连接复用和健康检查
+- **批量操作优化** - 支持设备批量认证测试
+
+### 多厂商统一管理
+- **查询模板引擎** - 统一不同厂商的命令差异
+- **厂商命令映射** - 支持TextFSM解析和自定义解析
+- **平台自动识别** - 根据厂商自动选择Scrapli平台
+
+### 智能认证体系
+- **认证测试功能** - 单个/批量设备连接测试
+- **凭据管理** - 动态/静态密码统一管理
+- **认证统计分析** - 成功率、执行时间等统计
+
+## 🚀 未来规划
+
+### 第三阶段：交互功能
+- **CLI 交互终端** - WebSocket + Xterm.js 实现类CRT体验
+- **配置对比功能** - 设备配置版本对比和差异分析
+- **批量配置部署** - 支持配置模板批量下发
+
+### 第四阶段：扩展功能
+- **网络拓扑发现** - 自动发现和绘制网络拓扑
+- **自动化任务调度** - 定时任务和工作流编排
+- **导入导出优化** - Excel批量导入设备信息
+
+### 第五阶段：智能化
+- **配置合规性检查** - 自动化检查设备配置安全基线
+- **智能故障诊断** - AI辅助网络故障快速定位
+- **性能监控告警** - 设备性能实时监控和告警
 
 ## ⚡ 快速开始
 
@@ -76,79 +115,43 @@ uv run python start.py
 pytest
 ```
 
-## � 权限系统
+## 🔐 权限系统
 
 ### RBAC 模型
 - **用户 (User)**: 系统使用者
 - **角色 (Role)**: 权限的集合
 - **权限 (Permission)**: 具体的操作权限
 
-### 权限控制
-```python
-# API 端点权限控制
-@router.get("/users")
-async def list_users(
-    context: OperationContext = Depends(require_permission("user:read"))
-):
-    """获取用户列表"""
-    pass
-
-# 多权限检查
-@router.put("/users/{user_id}")
-async def update_user(
-    context: OperationContext = Depends(require_any_permission("user:update", "admin:write"))
-):
-    """更新用户"""
-    pass
-```
-
-### 操作日志
-```python
-# 自动记录操作日志
-@log_create_with_context("user")
-async def create_user(self, request: UserCreateRequest, operation_context: OperationContext):
-    """创建用户时自动记录日志"""
-    pass
-```
-
-## 🔧 核心组件
-
-### 权限常量
-```python
-class Permissions:
-    # 用户管理
-    USER_CREATE = "user:create"
-    USER_READ = "user:read"
-    USER_UPDATE = "user:update"
-    USER_DELETE = "user:delete"
-    
-    # 角色管理
-    ROLE_CREATE = "role:create"
-    ROLE_READ = "role:read"
-    # ...
-```
-
-### 基础模型
-```python
-class BaseModel(Model):
-    id = fields.UUIDField(pk=True, default=uuid4)
-    created_at = fields.DatetimeField(auto_now_add=True)
-    updated_at = fields.DatetimeField(auto_now=True)
-    is_deleted = fields.BooleanField(default=False)  # 软删除
-    version = fields.IntField(default=1)  # 乐观锁
-```
-
 ## 🔒 安全特性
 
-- JWT Token 认证
-- 权限缓存机制
-- 软删除数据保护
-- 操作日志审计
-- 乐观锁防并发冲突
-- CORS 跨域支持
+- **JWT Token 认证** - 基于令牌的身份验证
+- **权限缓存机制** - Redis/内存双重缓存，支持权限热更新
+- **软删除数据保护** - 数据逻辑删除，保护重要信息
+- **操作日志审计** - 所有网络操作自动记录审计
+- **乐观锁防并发冲突** - 数据版本控制防止并发修改
+- **密码加密存储** - 设备认证密码安全加密
+- **连接安全控制** - SSH连接加密和超时控制
+- **权限精细化控制** - 网络操作权限细分到具体功能
+- **CORS 跨域支持** - 安全的跨域访问控制
+
+## 🌐 网络设备支持
+
+### 支持的设备品牌
+- **H3C (华三)** - hp_comware 平台，占比 85%
+- **华为 (Huawei)** - huawei_vrp 平台，占比 10%
+- **思科 (Cisco)** - cisco_iosxe 平台，占比 4%
+- **其他品牌** - 通用平台支持，占比 1%
+
+### 认证方式
+- **动态密码认证** - 用户手动输入，占比 98%
+- **静态密码认证** - 数据库存储，占比 2%
+- **SNMP 社区字符串** - 按基地统一管理
+
+### 网络架构支持
+- **接入层 (Access)** - 终端设备接入
+- **汇聚层 (Aggregation)** - 流量汇聚和分发
+- **核心层 (Core)** - 高速数据转发
 
 ## 📄 许可证
 
-MIT License
-
-
+[MIT License](LICENSE)
