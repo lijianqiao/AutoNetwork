@@ -5,6 +5,7 @@
 
 from contextlib import asynccontextmanager
 from typing import Any
+from uuid import UUID
 
 from nornir.core.inventory import Group, Host, Inventory
 
@@ -35,10 +36,10 @@ class InventoryFactory:
     @staticmethod
     async def build_inventory(
         device_hostnames: list[str] | None = None,
-        region_ids: list[int] | None = None,
-        vendor_ids: list[int] | None = None,
+        region_ids: list[UUID] | None = None,
+        vendor_ids: list[UUID] | None = None,
         device_types: list[str] | None = None,
-        user_id: int | None = None,
+        user_id: UUID | None = None,
     ) -> Inventory:
         """快速构建设备清单
 
@@ -117,7 +118,7 @@ class InventoryFactory:
             return []
 
     @staticmethod
-    async def get_devices_by_type(device_type: str, user_id: int | None = None) -> list[Host]:
+    async def get_devices_by_type(device_type: str, user_id: UUID | None = None) -> list[Host]:
         """根据设备类型获取设备列表
 
         Args:
@@ -206,7 +207,7 @@ class InventoryFactory:
         return []
 
     @staticmethod
-    async def filter_devices_by_groups(group_names: list[str], user_id: int | None = None) -> list[Host]:
+    async def filter_devices_by_groups(group_names: list[str], user_id: UUID | None = None) -> list[Host]:
         """根据组名过滤设备
 
         Args:
@@ -246,10 +247,10 @@ class InventoryCache:
     def _generate_cache_key(
         self,
         device_hostnames: list[str] | None = None,
-        region_ids: list[int] | None = None,
-        vendor_ids: list[int] | None = None,
+        region_ids: list[UUID] | None = None,
+        vendor_ids: list[UUID] | None = None,
         device_types: list[str] | None = None,
-        user_id: int | None = None,
+        user_id: UUID | None = None,
     ) -> str:
         """生成缓存键"""
         import hashlib
@@ -278,10 +279,10 @@ class InventoryCache:
     async def get_inventory(
         self,
         device_hostnames: list[str] | None = None,
-        region_ids: list[int] | None = None,
-        vendor_ids: list[int] | None = None,
+        region_ids: list[UUID] | None = None,
+        vendor_ids: list[UUID] | None = None,
         device_types: list[str] | None = None,
-        user_id: int | None = None,
+        user_id: UUID | None = None,
         use_cache: bool = True,
     ) -> Inventory:
         """获取设备清单（支持缓存）

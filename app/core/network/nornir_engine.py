@@ -73,7 +73,7 @@ class NornirQueryEngine:
             logger.error(f"Nornir实例初始化失败: {e}")
             raise BusinessException(f"Nornir初始化失败: {e}") from e
 
-    async def _build_inventory(self, devices: list[Device], user_id: int | None = None) -> Inventory:
+    async def _build_inventory(self, devices: list[Device], user_id: UUID | None = None) -> Inventory:
         """使用动态库存系统构建Nornir设备清单
 
         Args:
@@ -262,7 +262,7 @@ class NornirQueryEngine:
         devices: list[Device],
         template_id: UUID,
         query_params: dict[str, Any] | None = None,
-        user_id: int | None = None,
+        user_id: UUID | None = None,
     ) -> list[NornirQueryResult]:
         """执行并行查询
 
@@ -415,7 +415,7 @@ class NornirQueryEngine:
         devices: list[Device],
         template_id: UUID,
         query_params: dict[str, Any] | None = None,
-        user_id: int | None = None,
+        user_id: UUID | None = None,
         custom_template: str | None = None,
         enable_parsing: bool = True,
     ) -> list[ParsedQueryResult]:

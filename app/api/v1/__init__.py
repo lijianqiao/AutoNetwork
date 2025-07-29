@@ -25,6 +25,7 @@ from app.api.v1 import (
     query_templates,
     regions,
     roles,
+    universal_query,
     user_relations,
     users,
     vendor_commands,
@@ -52,6 +53,7 @@ api_router.include_router(regions.router, tags=["基地管理"])
 api_router.include_router(vendors.router, tags=["厂商管理"])
 api_router.include_router(vendor_commands.router, tags=["厂商命令管理"])
 api_router.include_router(query_templates.router, tags=["查询模板管理"])
+api_router.include_router(universal_query.router, tags=["通用查询"])
 api_router.include_router(query_history.router, tags=["查询历史管理"])
 api_router.include_router(network_query.router, tags=["网络查询"])
 api_router.include_router(import_export.router, tags=["导入导出"])

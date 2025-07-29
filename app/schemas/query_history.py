@@ -29,7 +29,7 @@ class QueryHistoryBase(ORMBase):
     query_params: dict[str, Any] = Field(description="查询参数")
     target_devices: list[str] = Field(description="目标设备IP列表")
     execution_time: float = Field(description="执行耗时(秒)", ge=0)
-    status: Literal["success", "partial", "failed"] = Field(description="状态")
+    status: Literal["success", "partial", "failed", "running"] = Field(description="状态")
     error_message: str | None = Field(default=None, description="错误信息", max_length=2000)
 
 
@@ -39,8 +39,16 @@ class QueryHistoryCreateRequest(BaseModel):
     query_type: str = Field(description="查询类型", min_length=2, max_length=50)
     query_params: dict[str, Any] = Field(description="查询参数")
     target_devices: list[str] = Field(description="目标设备IP列表", min_length=1)
-    execution_time: float = Field(description="执行耗时(秒)", ge=0)
-    status: Literal["success", "partial", "failed"] = Field(description="状态")
+    execution_time: float = Field(default=0.0, description="执行耗时(秒)", ge=0)
+    status: Literal["success", "partial", "failed", "running"] = Field(description="状态")
+    error_message: str | None = Field(default=None, description="错误信息", max_length=2000)
+
+
+class QueryHistoryUpdateRequest(BaseModel):
+    """更新查询历史请求"""
+
+    execution_time: float | None = Field(default=None, description="执行耗时(秒)", ge=0)
+    status: Literal["success", "partial", "failed", "running"] | None = Field(default=None, description="状态")
     error_message: str | None = Field(default=None, description="错误信息", max_length=2000)
 
 
@@ -61,7 +69,7 @@ class QueryHistoryListRequest(ListQueryRequest):
 
     user_id: ObjectUUID | None = Field(default=None, description="用户ID筛选")
     query_type: str | None = Field(default=None, description="查询类型筛选")
-    status: Literal["success", "partial", "failed"] | None = Field(default=None, description="状态筛选")
+    status: Literal["success", "partial", "failed", "running"] | None = Field(default=None, description="状态筛选")
     execution_time_min: float | None = Field(default=None, description="最小执行时间筛选", ge=0)
     execution_time_max: float | None = Field(default=None, description="最大执行时间筛选", ge=0)
 
