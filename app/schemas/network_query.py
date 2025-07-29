@@ -174,3 +174,17 @@ class NetworkQueryTemplateListResponse(BaseModel):
     code: int = Field(default=200, description="响应代码")
     message: str = Field(default="获取成功", description="响应消息")
     templates: list[AvailableQueryTemplate] = Field(description="可用模板列表")
+
+
+class NornirQueryResult(BaseModel):
+    """Nornir查询结果"""
+
+    device_id: ObjectUUID | None = Field(default=None, description="设备ID")
+    hostname: str = Field(description="设备主机名")
+    ip_address: str = Field(description="设备IP地址")
+    vendor: str | None = Field(default=None, description="设备厂商")
+    platform: str | None = Field(default=None, description="设备平台")
+    success: bool = Field(description="查询是否成功")
+    commands: list[CommandResult] = Field(description="命令执行结果列表")
+    total_execution_time: float = Field(description="总执行时间(秒)", ge=0)
+    error_message: str | None = Field(default=None, description="错误信息")

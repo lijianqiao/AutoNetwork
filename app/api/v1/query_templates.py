@@ -16,6 +16,7 @@ from app.core.permissions.simple_decorators import (
 )
 from app.schemas.base import SuccessResponse
 from app.schemas.query_template import (
+    QueryTemplateActivateRequest,
     QueryTemplateCreateRequest,
     QueryTemplateDetailResponse,
     QueryTemplateListRequest,
@@ -125,3 +126,67 @@ async def batch_delete_query_templates(
     """批量删除查询模板"""
     deleted_count = await service.batch_delete_templates(template_ids, operation_context)
     return SuccessResponse(message=f"成功删除 {deleted_count} 个查询模板")
+
+
+# ===== 激活/禁用功能 =====
+
+
+@router.put("/{template_id}/activate", response_model=QueryTemplateResponse, summary="激活查询模板")
+async def activate_query_template(
+    template_id: UUID,
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_ACTIVATE)),
+):
+    """激活查询模板"""
+    return await service.activate_template(template_id, operation_context)
+
+
+@router.put("/{template_id}/deactivate", response_model=QueryTemplateResponse, summary="停用查询模板")
+async def deactivate_query_template(
+    template_id: UUID,
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_ACTIVATE)),
+):
+    """停用查询模板"""
+    return await service.deactivate_template(template_id, operation_context)
+
+
+@router.put("/batch/activate", response_model=dict, summary="批量激活/停用查询模板")
+async def batch_activate_query_templates(
+    request_data: QueryTemplateActivateRequest,
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_ACTIVATE)),
+):
+    """批量激活/停用查询模板"""
+    return await service.batch_activate_templates(request_data, operation_context)
+
+
+# ===== 查询功能 =====
+
+
+@router.get("/active", response_model=list[QueryTemplateResponse], summary="获取所有激活的查询模板")
+async def get_active_query_templates(
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_READ)),
+):
+    """获取所有激活的查询模板"""
+    return await service.get_active_templates(operation_context)
+
+
+@router.get("/type/{template_type}", response_model=list[QueryTemplateResponse], summary="根据类型获取查询模板")
+async def get_query_templates_by_type(
+    template_type: str,
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_READ)),
+):
+    """根据模板类型获取查询模板"""
+    return await service.get_templates_by_type(template_type, operation_context)
+
+
+@router.get("/with-commands", response_model=list[QueryTemplateResponse], summary="获取包含厂商命令的查询模板")
+async def get_query_templates_with_commands(
+    service: QueryTemplateService = Depends(get_query_template_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_READ)),
+):
+    """获取包含厂商命令的查询模板"""
+    return await service.get_templates_with_commands(operation_context)

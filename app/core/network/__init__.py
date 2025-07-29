@@ -9,6 +9,9 @@
 from .authentication_tester import AuthenticationTester, AuthenticationTestResult, BatchTestResult
 from .connection_manager import DeviceConnection, DeviceConnectionManager
 from .connection_pool import ConnectionPool, ConnectionPoolStats, close_connection_pool, get_connection_pool
+from .nornir_engine import NornirQueryEngine, NornirQueryResult
+from .parser_integration import ParsedQueryResult, QueryResultParser
+from .textfsm_parser import TextFSMParser
 
 __all__ = [
     "DeviceConnection",
@@ -20,4 +23,9 @@ __all__ = [
     "AuthenticationTester",
     "AuthenticationTestResult",
     "BatchTestResult",
+    "NornirQueryEngine",
+    "NornirQueryResult",
+    "TextFSMParser",
+    "QueryResultParser",
+    "ParsedQueryResult",
 ]
