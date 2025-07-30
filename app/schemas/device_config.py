@@ -313,3 +313,102 @@ class ExportDiffToHtmlRequest(BaseModel):
     config2_id: ObjectUUID = Field(description="配置2的ID")
     ignore_whitespace: bool = Field(default=True, description="是否忽略空白字符差异")
     ignore_comments: bool = Field(default=False, description="是否忽略注释行差异")
+
+
+# ===== 配置回滚相关Schema =====
+
+
+class ConfigRollbackRequest(BaseModel):
+    """配置回滚请求"""
+
+    config_id: ObjectUUID = Field(description="要回滚到的配置快照ID")
+    target_device_id: ObjectUUID | None = Field(default=None, description="目标设备ID（如果不同于配置快照的设备）")
+    confirm_rollback: bool = Field(default=False, description="确认执行回滚操作")
+
+
+class ConfigRollbackPreviewRequest(BaseModel):
+    """配置回滚预览请求"""
+
+    config_id: ObjectUUID = Field(description="要回滚到的配置快照ID")
+    target_device_id: ObjectUUID | None = Field(default=None, description="目标设备ID")
+
+
+class ConfigRollbackImpactAnalysis(BaseModel):
+    """配置回滚影响分析"""
+
+    risk_level: Literal["low", "medium", "high"] = Field(description="风险级别")
+    warnings: list[str] = Field(description="警告信息列表")
+    affected_features: list[str] = Field(description="受影响功能列表")
+    recommended_actions: list[str] = Field(description="建议操作列表")
+
+
+class ConfigRollbackDurationEstimate(BaseModel):
+    """配置回滚耗时估算"""
+
+    estimated_seconds: int = Field(description="估算耗时（秒）")
+    estimated_minutes: float = Field(description="估算耗时（分钟）")
+    description: str = Field(description="耗时描述")
+
+
+class ConfigRollbackPreviewResponse(BaseModel):
+    """配置回滚预览响应"""
+
+    can_rollback: bool = Field(description="是否可以回滚")
+    error: str | None = Field(default=None, description="错误信息（当不能回滚时）")
+    current_config: dict[str, Any] | None = Field(default=None, description="当前配置信息")
+    target_config: dict[str, Any] | None = Field(default=None, description="目标配置信息")
+    device_id: str | None = Field(default=None, description="设备ID")
+    diff_summary: ConfigDiffSummary | None = Field(default=None, description="配置差异摘要")
+    sections_affected: list[str] | None = Field(default=None, description="受影响的配置段落")
+    impact_analysis: ConfigRollbackImpactAnalysis | None = Field(default=None, description="影响分析")
+    total_changes: int | None = Field(default=None, description="总变更数")
+    estimated_duration: ConfigRollbackDurationEstimate | None = Field(default=None, description="耗时估算")
+
+
+class ConfigRollbackResponse(BaseModel):
+    """配置回滚响应"""
+
+    success: bool = Field(description="回滚是否成功")
+    message: str = Field(description="回滚结果消息")
+    original_config_id: str = Field(description="原始配置快照ID")
+    new_config_id: str | None = Field(default=None, description="新配置快照ID（成功时）")
+    device_id: str = Field(description="设备ID")
+    rollback_time: str | None = Field(default=None, description="回滚时间")
+    applied_lines: int | None = Field(default=None, description="应用的配置行数")
+    deployment_details: str | None = Field(default=None, description="部署详情")
+    error: str | None = Field(default=None, description="错误信息（失败时）")
+
+
+class BatchConfigRollbackRequest(BaseModel):
+    """批量配置回滚请求"""
+
+    rollback_requests: list[dict[str, Any]] = Field(
+        description="回滚请求列表",
+        min_length=1,
+        max_length=20,
+        examples=[[{"config_id": "uuid1", "device_id": "uuid2"}, {"config_id": "uuid3"}]],
+    )
+
+
+class BatchConfigRollbackResult(BaseModel):
+    """批量配置回滚结果项"""
+
+    index: int = Field(description="批量索引")
+    success: bool = Field(description="回滚是否成功")
+    message: str = Field(description="回滚结果消息")
+    config_id: str = Field(description="配置快照ID")
+    device_id: str = Field(description="设备ID")
+    error: str | None = Field(default=None, description="错误信息（失败时）")
+    original_config_id: str | None = Field(default=None, description="原始配置快照ID")
+    new_config_id: str | None = Field(default=None, description="新配置快照ID")
+    rollback_time: str | None = Field(default=None, description="回滚时间")
+    applied_lines: int | None = Field(default=None, description="应用的配置行数")
+
+
+class BatchConfigRollbackResponse(BaseModel):
+    """批量配置回滚响应"""
+
+    total_rollbacks: int = Field(description="总回滚数")
+    successful_rollbacks: int = Field(description="成功回滚数")
+    failed_rollbacks: int = Field(description="失败回滚数")
+    results: list[BatchConfigRollbackResult] = Field(description="详细结果列表")

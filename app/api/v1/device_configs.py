@@ -19,9 +19,15 @@ from app.schemas.base import SuccessResponse
 from app.schemas.device_config import (
     BatchConfigCompareRequest,
     BatchConfigCompareResponse,
+    BatchConfigRollbackRequest,
+    BatchConfigRollbackResponse,
     CompareWithLatestRequest,
     ConfigDiffSummaryRequest,
     ConfigDiffSummaryResponse,
+    ConfigRollbackPreviewRequest,
+    ConfigRollbackPreviewResponse,
+    ConfigRollbackRequest,
+    ConfigRollbackResponse,
     DeviceConfigBackupRequest,
     DeviceConfigBackupResponse,
     DeviceConfigBackupResult,
@@ -610,4 +616,101 @@ async def export_diff_to_html(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"导出差异HTML失败: {str(e)}"
+        ) from e
+
+
+# ===== 配置回滚功能 =====
+
+
+@router.post("/rollback/preview", response_model=ConfigRollbackPreviewResponse, summary="预览配置回滚")
+async def preview_config_rollback(
+    request: ConfigRollbackPreviewRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_ROLLBACK)),
+):
+    """预览配置回滚的影响，包含风险分析和变更预估"""
+    try:
+        preview_result = await service.preview_rollback(
+            config_id=request.config_id, target_device_id=request.target_device_id
+        )
+
+        return ConfigRollbackPreviewResponse(**preview_result)
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"生成回滚预览失败: {str(e)}"
+        ) from e
+
+
+@router.post("/rollback", response_model=ConfigRollbackResponse, summary="执行配置回滚")
+async def rollback_config(
+    request: ConfigRollbackRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_ROLLBACK)),
+):
+    """执行配置回滚操作，将设备配置回滚到指定的快照版本"""
+    if not request.confirm_rollback:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="必须确认回滚操作，请设置 confirm_rollback=true"
+        )
+
+    try:
+        rollback_result = await service.rollback_to_config(
+            config_id=request.config_id, target_device_id=request.target_device_id, operation_context=operation_context
+        )
+
+        return ConfigRollbackResponse(**rollback_result)
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"配置回滚失败: {str(e)}") from e
+
+
+@router.post("/rollback/batch", response_model=BatchConfigRollbackResponse, summary="批量配置回滚")
+async def batch_rollback_configs(
+    request: BatchConfigRollbackRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_ROLLBACK)),
+):
+    """批量执行配置回滚操作"""
+    try:
+        results = await service.batch_rollback_configs(
+            rollback_requests=request.rollback_requests, operation_context=operation_context
+        )
+
+        # 统计成功和失败数量
+        successful_count = sum(1 for result in results if result["success"])
+        failed_count = len(results) - successful_count
+
+        # 转换结果格式
+        batch_results = []
+        for result in results:
+            batch_results.append(
+                {
+                    "index": result.get("index", 0),
+                    "success": result["success"],
+                    "message": result["message"],
+                    "config_id": result.get("original_config_id", ""),
+                    "device_id": result["device_id"],
+                    "error": result.get("error"),
+                    "original_config_id": result.get("original_config_id"),
+                    "new_config_id": result.get("new_config_id"),
+                    "rollback_time": result.get("rollback_time"),
+                    "applied_lines": result.get("applied_lines"),
+                }
+            )
+
+        return BatchConfigRollbackResponse(
+            total_rollbacks=len(results),
+            successful_rollbacks=successful_count,
+            failed_rollbacks=failed_count,
+            results=batch_results,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"批量配置回滚失败: {str(e)}"
         ) from e

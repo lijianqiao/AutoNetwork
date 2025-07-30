@@ -493,6 +493,9 @@ class Permissions:
     CLI_CONFIG = "cli:config"  # CLI配置命令权限
     CLI_SESSION_MANAGE = "cli:session_manage"  # CLI会话管理权限
 
+    # 配置回滚功能
+    DEVICE_CONFIG_ROLLBACK = "device_config:rollback"  # 配置回滚权限
+
 
 # ===== 向后兼容函数 =====
 

@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from app.core.network.connection_manager import get_connection_manager
 from app.dao.device_config import DeviceConfigDAO
 from app.models.device_config import DeviceConfig
 from app.services.base import BaseService
@@ -552,3 +553,324 @@ class DeviceConfigService(BaseService[DeviceConfig]):
     ) -> tuple[list[DeviceConfig], int]:
         """分页获取配置快照"""
         return await self.dao.get_configs_paginated_optimized(page, page_size, device_id, config_type)
+
+    # ===== 配置回滚功能 =====
+
+    @log_update_with_context("device_config")
+    async def rollback_to_config(
+        self, config_id: UUID, target_device_id: UUID | None = None, operation_context: OperationContext | None = None
+    ) -> dict[str, Any]:
+        """回滚到指定的配置快照
+
+        Args:
+            config_id: 要回滚到的配置快照ID
+            target_device_id: 目标设备ID（如果不同于配置快照的设备）
+            operation_context: 操作上下文
+
+        Returns:
+            回滚操作结果
+        """
+        # 获取配置快照
+        config = await self.dao.get_config_with_details(config_id)
+        if not config:
+            raise ValueError("配置快照不存在")
+
+        # 确定目标设备
+        device_id = target_device_id or config.device.id
+
+        logger.info(f"开始回滚设备 {device_id} 到配置快照 {config_id}")
+
+        try:
+            # 1. 在实际设备上应用配置（这里需要集成网络设备连接服务）
+            rollback_result = await self._apply_config_to_device(device_id, config.config_content)
+
+            if rollback_result["success"]:
+                # 2. 创建新的配置快照记录回滚操作
+                new_config = await self.create_config_snapshot(
+                    device_id=device_id,
+                    config_type=config.config_type,
+                    config_content=config.config_content,
+                    backup_reason=f"回滚到配置 {config_id} ({config.backup_reason})",
+                    operation_context=operation_context,
+                )
+
+                logger.info(f"配置回滚成功，新配置快照: {new_config.id}")
+
+                return {
+                    "success": True,
+                    "message": "配置回滚成功",
+                    "original_config_id": str(config_id),
+                    "new_config_id": str(new_config.id),
+                    "device_id": str(device_id),
+                    "rollback_time": datetime.now().isoformat(),
+                    "applied_lines": rollback_result.get("applied_lines", 0),
+                    "deployment_details": rollback_result.get("details", ""),
+                }
+            else:
+                logger.error(f"配置回滚失败: {rollback_result.get('error', '未知错误')}")
+                return {
+                    "success": False,
+                    "message": "配置回滚失败",
+                    "error": rollback_result.get("error", "未知错误"),
+                    "original_config_id": str(config_id),
+                    "device_id": str(device_id),
+                }
+
+        except Exception as e:
+            logger.error(f"配置回滚过程中发生异常: {e}")
+            return {
+                "success": False,
+                "message": "配置回滚失败",
+                "error": str(e),
+                "original_config_id": str(config_id),
+                "device_id": str(device_id),
+            }
+
+    async def _apply_config_to_device(self, device_id: UUID, config_content: str) -> dict[str, Any]:
+        """将配置应用到实际设备
+
+        Args:
+            device_id: 设备ID
+            config_content: 配置内容
+
+        Returns:
+            应用结果
+        """
+        from app.dao.device import DeviceDAO
+
+        try:
+            # 获取设备信息
+            device_dao = DeviceDAO()
+            device = await device_dao.get_by_id(device_id)
+            if not device:
+                return {"success": False, "error": "设备不存在"}
+
+            if not device.is_active:
+                return {"success": False, "error": "设备已禁用"}
+
+            # 创建网络连接
+            connection_manager = get_connection_manager()
+
+            # 连接到设备
+            connection = await connection_manager.get_connection(device)
+            if not connection:
+                return {"success": False, "error": "无法连接到设备"}
+
+            # 应用配置
+            config_lines = [
+                line.strip()
+                for line in config_content.splitlines()
+                if line.strip() and not line.strip().startswith("!")
+            ]
+
+            # 进入配置模式
+            await connection.execute_command("configure terminal")
+
+            applied_lines = 0
+            failed_commands = []
+
+            # 逐行应用配置
+            for line in config_lines:
+                try:
+                    result = await connection.execute_command(line)
+                    if "error" not in result.result.lower() and "invalid" not in result.result.lower():
+                        applied_lines += 1
+                    else:
+                        failed_commands.append(f"{line}: {result.result}")
+                except Exception as cmd_error:
+                    failed_commands.append(f"{line}: {str(cmd_error)}")
+
+            # 退出配置模式并保存
+            await connection.execute_command("end")
+            save_result = await connection.execute_command("write memory")
+
+            # 关闭连接
+            await connection.disconnect()
+
+            success = len(failed_commands) == 0
+            details = f"应用了 {applied_lines}/{len(config_lines)} 行配置"
+            if failed_commands:
+                details += f", 失败命令: {'; '.join(failed_commands[:5])}"  # 只显示前5个失败命令
+
+            return {
+                "success": success,
+                "applied_lines": applied_lines,
+                "total_lines": len(config_lines),
+                "failed_commands": failed_commands,
+                "details": details,
+                "save_result": save_result.result if save_result else "未知",
+            }
+
+        except Exception as e:
+            logger.error(f"应用配置到设备失败: {e}")
+            return {"success": False, "error": f"设备连接或配置应用失败: {str(e)}"}
+
+    async def batch_rollback_configs(
+        self, rollback_requests: list[dict[str, Any]], operation_context: OperationContext | None = None
+    ) -> list[dict[str, Any]]:
+        """批量配置回滚
+
+        Args:
+            rollback_requests: 回滚请求列表 [{"config_id": UUID, "device_id": UUID?}, ...]
+            operation_context: 操作上下文
+
+        Returns:
+            批量回滚结果列表
+        """
+        results = []
+
+        for i, request in enumerate(rollback_requests):
+            try:
+                result = await self.rollback_to_config(
+                    config_id=request["config_id"],
+                    target_device_id=request.get("device_id"),
+                    operation_context=operation_context,
+                )
+                result["index"] = i
+                results.append(result)
+
+            except Exception as e:
+                logger.error(f"批量回滚第 {i} 项失败: {e}")
+                results.append(
+                    {
+                        "index": i,
+                        "success": False,
+                        "message": "批量回滚失败",
+                        "error": str(e),
+                        "config_id": str(request.get("config_id", "")),
+                        "device_id": str(request.get("device_id", "")),
+                    }
+                )
+
+        return results
+
+    async def preview_rollback(self, config_id: UUID, target_device_id: UUID | None = None) -> dict[str, Any]:
+        """预览配置回滚的影响
+
+        Args:
+            config_id: 要回滚到的配置快照ID
+            target_device_id: 目标设备ID
+
+        Returns:
+            回滚预览信息
+        """
+        # 获取回滚目标配置
+        target_config = await self.dao.get_config_with_details(config_id)
+        if not target_config:
+            raise ValueError("目标配置快照不存在")
+
+        # 确定设备ID
+        device_id = target_device_id or target_config.device.id
+
+        # 获取当前最新配置
+        current_config = await self.dao.get_latest_config(device_id, target_config.config_type)
+        if not current_config:
+            return {"can_rollback": False, "error": "设备没有当前配置快照，无法进行对比"}
+
+        # 如果要回滚到的就是当前配置，提示用户
+        if current_config.id == target_config.id:
+            return {"can_rollback": False, "error": "目标配置已经是当前最新配置，无需回滚"}
+
+        # 对比配置差异
+        try:
+            diff_result = await self.compare_configs(
+                config1_id=current_config.id, config2_id=target_config.id, ignore_whitespace=True, ignore_comments=True
+            )
+
+            # 分析配置差异的影响
+            impact_analysis = self._analyze_rollback_impact(diff_result)
+
+            return {
+                "can_rollback": True,
+                "current_config": {
+                    "id": str(current_config.id),
+                    "created_at": current_config.created_at.isoformat() if current_config.created_at else None,
+                    "backup_reason": current_config.backup_reason,
+                },
+                "target_config": {
+                    "id": str(target_config.id),
+                    "created_at": target_config.created_at.isoformat() if target_config.created_at else None,
+                    "backup_reason": target_config.backup_reason,
+                },
+                "device_id": str(device_id),
+                "diff_summary": diff_result.summary,
+                "sections_affected": [section.value for section in diff_result.sections_changed],
+                "impact_analysis": impact_analysis,
+                "total_changes": diff_result.summary.get("total_differences", 0),
+                "estimated_duration": self._estimate_rollback_duration(diff_result.summary.get("total_differences", 0)),
+            }
+
+        except Exception as e:
+            logger.error(f"回滚预览失败: {e}")
+            return {"can_rollback": False, "error": f"无法生成回滚预览: {str(e)}"}
+
+    def _analyze_rollback_impact(self, diff_result) -> dict[str, Any]:
+        """分析回滚操作的影响
+
+        Args:
+            diff_result: 配置差异结果
+
+        Returns:
+            影响分析结果
+        """
+        impact = {"risk_level": "low", "warnings": [], "affected_features": [], "recommended_actions": []}
+
+        # 分析受影响的配置段落
+        section_stats = diff_result.summary.get("section_statistics", {})
+
+        for section, stats in section_stats.items():
+            if stats["total"] > 0:
+                impact["affected_features"].append(section)
+
+                # 根据不同的配置段落判断风险级别
+                if section in ["interface", "routing"]:
+                    if stats["total"] > 10:
+                        impact["risk_level"] = "high"
+                        impact["warnings"].append(f"{section}配置变更较多({stats['total']}行)，可能影响网络连通性")
+                    elif stats["total"] > 5:
+                        impact["risk_level"] = "medium"
+
+                elif section == "security":
+                    impact["risk_level"] = "high"
+                    impact["warnings"].append("安全配置将发生变更，请确认访问权限")
+
+        # 基于总变更量调整风险级别
+        total_changes = diff_result.summary.get("total_differences", 0)
+        if total_changes > 50:
+            impact["risk_level"] = "high"
+        elif total_changes > 20 and impact["risk_level"] == "low":
+            impact["risk_level"] = "medium"
+
+        # 生成建议操作
+        if impact["risk_level"] == "high":
+            impact["recommended_actions"].extend(
+                ["建议在维护窗口内执行回滚操作", "确保有应急恢复方案", "建议先在测试环境验证配置"]
+            )
+        elif impact["risk_level"] == "medium":
+            impact["recommended_actions"].extend(["建议提前通知相关人员", "确认当前网络状态正常"])
+        else:
+            impact["recommended_actions"].append("配置变更较小，可以安全执行回滚")
+
+        return impact
+
+    def _estimate_rollback_duration(self, total_changes: int) -> dict[str, Any]:
+        """估算回滚操作耗时
+
+        Args:
+            total_changes: 总变更行数
+
+        Returns:
+            耗时估算
+        """
+        # 基础时间（秒）
+        base_time = 30
+        # 每行配置大约需要的时间（秒）
+        time_per_line = 0.5
+
+        estimated_seconds = base_time + (total_changes * time_per_line)
+
+        return {
+            "estimated_seconds": int(estimated_seconds),
+            "estimated_minutes": round(estimated_seconds / 60, 1),
+            "description": f"预计需要 {round(estimated_seconds / 60, 1)} 分钟完成回滚操作",
+        }
