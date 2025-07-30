@@ -18,28 +18,36 @@ from scrapli.exceptions import ScrapliException
 
 from app.core.exceptions import BusinessException
 from app.core.network.config import network_config
+from app.core.network.interfaces import IAuthenticationProvider
 from app.core.network.inventory_factory import InventoryFactory
 from app.core.network.parser_integration import ParsedQueryResult, QueryResultParser
-from app.dao.device import DeviceDAO
-from app.dao.vendor import VendorDAO
-from app.dao.vendor_command import VendorCommandDAO
 from app.models.device import Device
 from app.schemas.network_query import CommandResult, NornirQueryResult
-from app.services.authentication import AuthenticationManager
 from app.utils.logger import logger
 
 
 class NornirQueryEngine:
     """Nornir查询引擎 - 实现并行任务执行框架"""
 
-    def __init__(self):
+    def __init__(self, auth_provider: IAuthenticationProvider | None = None):
+        # 延迟导入以避免循环依赖
+        from app.dao.device import DeviceDAO
+        from app.dao.vendor import VendorDAO
+        from app.dao.vendor_command import VendorCommandDAO
+
         self.device_dao = DeviceDAO()
         self.vendor_dao = VendorDAO()
         self.vendor_command_dao = VendorCommandDAO()
-        self.auth_manager = AuthenticationManager()
+        self.auth_provider = auth_provider
         self.result_parser = QueryResultParser()
         self._nornir_instance = None
         self._semaphore = asyncio.Semaphore(network_config.concurrency.MAX_CONCURRENT_QUERIES)
+
+        # 延迟导入以避免循环依赖
+        if self.auth_provider is None:
+            from app.services.authentication import AuthenticationManager
+
+            self.auth_provider = AuthenticationManager()
 
     def _init_nornir(self, inventory: Inventory) -> None:
         """初始化Nornir实例

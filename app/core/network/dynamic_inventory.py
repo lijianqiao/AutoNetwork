@@ -8,9 +8,6 @@ from typing import Any
 
 from nornir.core.inventory import Defaults, Group, Groups, Host, Hosts, Inventory, ParentGroups
 
-from app.dao.device import DeviceDAO
-from app.dao.region import RegionDAO
-from app.dao.vendor import VendorDAO
 from app.models.device import Device
 from app.models.region import Region
 from app.models.vendor import Vendor
@@ -22,6 +19,11 @@ class DynamicInventoryBuilder:
 
     def __init__(self):
         """初始化动态清单构建器"""
+        # 延迟导入避免循环依赖
+        from app.dao.device import DeviceDAO
+        from app.dao.region import RegionDAO
+        from app.dao.vendor import VendorDAO
+        
         self.device_dao = DeviceDAO()
         self.vendor_dao = VendorDAO()
         self.region_dao = RegionDAO()

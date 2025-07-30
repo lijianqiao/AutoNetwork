@@ -60,17 +60,24 @@ class ScrapliPlatformConfig(BaseModel):
 class ConnectionConfig(BaseModel):
     """连接配置"""
 
-    # 连接超时时间（秒）- 快速连接测试
-    CONNECT_TIMEOUT: int = Field(default=5, ge=3, le=300)
+    # 连接超时时间（秒）
+    CONNECT_TIMEOUT: int = Field(default=8, ge=3, le=30)  # 增加到8秒，适应网络延迟
 
-    # 命令执行超时时间（秒）- 快速命令执行
-    COMMAND_TIMEOUT: int = Field(default=8, ge=5, le=600)
+    # 命令执行超时时间（秒）- 优化：平衡速度和可靠性
+    COMMAND_TIMEOUT: int = Field(default=15, ge=5, le=120)  # 增加到15秒，避免复杂命令超时
 
-    # 连接重试次数 - 批量测试时不重试，快速失败
-    MAX_RETRY_ATTEMPTS: int = Field(default=1, ge=1, le=10)
+    # 连接重试次数 - 优化：适度重试，提高成功率
+    MAX_RETRY_ATTEMPTS: int = Field(default=2, ge=1, le=5)  # 增加到2次，提高成功率
 
-    # 重试间隔时间（秒）- 减少重试间隔，提高测试效率
-    RETRY_INTERVAL: int = Field(default=1, ge=1, le=60)
+    # 重试间隔时间（秒）- 优化：指数退避策略
+    RETRY_INTERVAL: int = Field(default=2, ge=1, le=10)  # 增加到2秒
+    ENABLE_EXPONENTIAL_BACKOFF: bool = Field(default=True)  # 启用指数退避
+    BACKOFF_MULTIPLIER: float = Field(default=1.5, ge=1.0, le=3.0)  # 退避倍数
+
+    # 连接保活配置 - 新增：保持连接活跃
+    ENABLE_KEEPALIVE: bool = Field(default=True)  # 启用保活
+    KEEPALIVE_INTERVAL: int = Field(default=30, ge=10, le=300)  # 保活间隔
+    KEEPALIVE_COUNT: int = Field(default=3, ge=1, le=10)  # 保活次数
 
     # SSH连接参数
     SSH_CONFIG_FILE: str | bool | None = Field(default=False)
@@ -90,31 +97,47 @@ class ConnectionConfig(BaseModel):
 
 
 class ConnectionPoolConfig(BaseModel):
-    """连接池配置"""
+    """连接池配置 - 优化后的高性能配置"""
 
-    # 连接池大小 - 适度增加最大连接数，减少最小连接数
-    MAX_POOL_SIZE: int = Field(default=150, ge=10, le=1000)
-    MIN_POOL_SIZE: int = Field(default=3, ge=1, le=50)
+    # 连接池大小 - 优化：动态调整，支持高并发
+    MAX_POOL_SIZE: int = Field(default=200, ge=50, le=500)  # 增加到200，支持更高并发
+    MIN_POOL_SIZE: int = Field(default=10, ge=5, le=50)     # 增加到10，保持基础连接
 
-    # 连接生命周期（秒）- 减少连接生命周期，避免长时间占用
-    MAX_CONNECTION_LIFETIME: int = Field(default=1800, ge=300, le=86400)  # 30分钟
+    # 连接生命周期（秒）- 优化：平衡性能和资源占用
+    MAX_CONNECTION_LIFETIME: int = Field(default=3600, ge=1800, le=14400)  # 1小时，减少频繁重建
 
-    # 空闲连接超时时间（秒）- 减少空闲超时，及时释放资源
-    IDLE_CONNECTION_TIMEOUT: int = Field(default=600, ge=60, le=7200)  # 10分钟
+    # 空闲连接超时时间（秒）- 优化：快速释放空闲资源
+    IDLE_CONNECTION_TIMEOUT: int = Field(default=300, ge=60, le=1800)  # 5分钟，快速回收
 
-    # 连接健康检查间隔（秒）- 增加健康检查频率
-    HEALTH_CHECK_INTERVAL: int = Field(default=180, ge=60, le=1800)  # 3分钟
+    # 连接健康检查间隔（秒）- 优化：平衡检查频率和性能
+    HEALTH_CHECK_INTERVAL: int = Field(default=120, ge=60, le=600)  # 2分钟，适中频率
 
-    # 连接获取超时时间（秒）- 减少获取超时，快速响应
-    CONNECTION_ACQUIRE_TIMEOUT: int = Field(default=15, ge=5, le=120)
+    # 连接获取超时时间（秒）- 优化：快速响应，避免长时间等待
+    CONNECTION_ACQUIRE_TIMEOUT: int = Field(default=10, ge=5, le=30)  # 10秒，快速超时
 
-    # 空闲连接清理间隔（秒）- 增加清理频率
-    CLEANUP_INTERVAL: int = Field(default=300, ge=60, le=3600)  # 5分钟
+    # 空闲连接清理间隔（秒）- 优化：频繁清理，保持池的健康
+    CLEANUP_INTERVAL: int = Field(default=180, ge=60, le=600)  # 3分钟，频繁清理
 
-    # 连接稳定性测试参数 - 减少测试时间，使用更轻量的测试命令
-    STABILITY_TEST_DURATION: int = Field(default=30, ge=10, le=300)  # 30秒
-    STABILITY_TEST_INTERVAL: int = Field(default=3, ge=1, le=30)  # 3秒
-    STABILITY_TEST_COMMAND: str = Field(default="display clock")  # 稳定性测试命令
+    # 连接预热配置 - 新增：启动时预创建连接
+    ENABLE_CONNECTION_WARMUP: bool = Field(default=True)  # 启用连接预热
+    WARMUP_CONNECTION_COUNT: int = Field(default=5, ge=1, le=20)  # 预热连接数
+
+    # 连接池监控配置 - 新增：增强监控能力
+    ENABLE_POOL_METRICS: bool = Field(default=True)  # 启用池指标监控
+    METRICS_COLLECTION_INTERVAL: int = Field(default=30, ge=10, le=300)  # 指标收集间隔
+
+    # 连接稳定性测试参数 - 优化：更高效的测试策略
+    STABILITY_TEST_DURATION: int = Field(default=60, ge=30, le=300)  # 1分钟，更全面测试
+    STABILITY_TEST_INTERVAL: int = Field(default=5, ge=2, le=30)  # 5秒，适中间隔
+    STABILITY_TEST_COMMAND: str = Field(default="show clock")  # 通用性更好的命令
+
+    # 连接重用配置 - 新增：优化连接重用策略
+    ENABLE_CONNECTION_REUSE: bool = Field(default=True)  # 启用连接重用
+    MAX_REUSE_COUNT: int = Field(default=100, ge=10, le=1000)  # 最大重用次数
+
+    # 负载均衡配置 - 新增：连接负载均衡
+    ENABLE_LOAD_BALANCING: bool = Field(default=True)  # 启用负载均衡
+    LOAD_BALANCE_STRATEGY: str = Field(default="round_robin")  # 负载均衡策略
 
 
 class AuthenticationConfig(BaseModel):
@@ -149,22 +172,31 @@ class AuthenticationConfig(BaseModel):
 
 
 class ConcurrencyConfig(BaseModel):
-    """并发控制配置"""
+    """并发控制配置 - 优化后的高并发配置"""
 
-    # 最大并发连接数 - 高并发批量测试
-    MAX_CONCURRENT_CONNECTIONS: int = Field(default=100, ge=5, le=200)
+    # 最大并发连接数 - 优化：支持更高并发，配合连接池扩容
+    MAX_CONCURRENT_CONNECTIONS: int = Field(default=150, ge=20, le=300)
 
-    # 最大并发查询数 - 优化并发查询数
-    MAX_CONCURRENT_QUERIES: int = Field(default=50, ge=5, le=100)
+    # 最大并发查询数 - 优化：提高查询并发度
+    MAX_CONCURRENT_QUERIES: int = Field(default=80, ge=10, le=150)
 
-    # 最大并发认证测试数 - 高并发认证测试
-    MAX_CONCURRENT_AUTH_TESTS: int = Field(default=30, ge=1, le=50)
+    # 最大并发认证测试数 - 优化：提高认证测试并发度
+    MAX_CONCURRENT_AUTH_TESTS: int = Field(default=50, ge=5, le=100)
 
-    # 连接信号量超时时间（秒）- 减少信号量超时时间
-    SEMAPHORE_TIMEOUT: int = Field(default=30, ge=10, le=300)
+    # 连接信号量超时时间（秒）- 优化：快速超时，避免阻塞
+    SEMAPHORE_TIMEOUT: int = Field(default=20, ge=5, le=120)
 
-    # 批量操作的默认批次大小 - 增加批次大小，提高批量操作效率
-    DEFAULT_BATCH_SIZE: int = Field(default=20, ge=1, le=50)
+    # 批量操作的默认批次大小 - 优化：增加批次大小，提高吞吐量
+    DEFAULT_BATCH_SIZE: int = Field(default=30, ge=5, le=100)
+
+    # 动态并发控制 - 新增：根据系统负载动态调整
+    ENABLE_DYNAMIC_CONCURRENCY: bool = Field(default=True)  # 启用动态并发控制
+    MIN_CONCURRENT_CONNECTIONS: int = Field(default=10, ge=1, le=50)  # 最小并发数
+    CONCURRENCY_SCALE_FACTOR: float = Field(default=1.5, ge=1.0, le=3.0)  # 并发扩展因子
+
+    # 队列配置 - 新增：任务队列优化
+    MAX_QUEUE_SIZE: int = Field(default=1000, ge=100, le=5000)  # 最大队列大小
+    QUEUE_TIMEOUT: int = Field(default=60, ge=10, le=300)  # 队列超时时间
 
 
 class MonitoringConfig(BaseModel):

@@ -8,7 +8,14 @@
 
 from uuid import UUID
 
-from app.core.exceptions import BadRequestException, BusinessException
+from app.core.exceptions import BadRequestException
+from app.core.network.exceptions import (
+    AuthenticationException,
+    CredentialsIncompleteException,
+    DynamicPasswordRequiredException,
+    NetworkException,
+)
+from app.core.network.interfaces import DeviceCredentials, IAuthenticationProvider
 from app.dao.device import DeviceDAO
 from app.dao.region import RegionDAO
 from app.dao.vendor import VendorDAO
@@ -19,28 +26,7 @@ from app.utils.encryption import decrypt_text
 from app.utils.logger import logger
 
 
-class DeviceCredentials:
-    """设备认证凭据"""
-
-    def __init__(
-        self,
-        username: str,
-        password: str,
-        auth_type: str,
-        snmp_community: str | None = None,
-        ssh_port: int = 22,
-    ):
-        self.username = username
-        self.password = password
-        self.auth_type = auth_type
-        self.snmp_community = snmp_community
-        self.ssh_port = ssh_port
-
-    def __repr__(self) -> str:
-        return f"DeviceCredentials(username={self.username}, auth_type={self.auth_type}, ssh_port={self.ssh_port})"
-
-
-class AuthenticationManager:
+class AuthenticationManager(IAuthenticationProvider):
     """设备认证管理器 - 实现动态/静态密码管理"""
 
     def __init__(self):
@@ -83,7 +69,7 @@ class AuthenticationManager:
         vendor = await device.vendor
 
         if not region or not vendor:
-            raise BusinessException(f"设备关联的基地或厂商信息缺失: device_id={device_id}")
+            raise NetworkException(f"设备关联的基地或厂商信息缺失: device_id={device_id}")
 
         logger.debug(
             f"设备信息: hostname={device.hostname}, auth_type={device.auth_type}, network_layer={device.network_layer}"
@@ -95,7 +81,11 @@ class AuthenticationManager:
         elif device.auth_type == "static":
             credentials = await self._get_static_password_from_db(device, region, vendor)
         else:
-            raise BusinessException(f"不支持的认证类型: {device.auth_type}")
+            raise AuthenticationException(
+                device_info=f"{device.hostname}({device.ip_address})",
+                auth_type=device.auth_type,
+                message=f"不支持的认证类型: {device.auth_type}",
+            )
 
         logger.info(f"成功获取设备认证凭据: device_id={device_id}, auth_type={device.auth_type}")
         return credentials
@@ -124,14 +114,10 @@ class AuthenticationManager:
             cache_key = f"{device.id}_{device.hostname}"
             cached_password = self._dynamic_password_cache.get(cache_key)
             if not cached_password:
-                raise BusinessException(
-                    f"设备 {device.hostname} 使用动态密码认证，请提供密码",
-                    detail={
-                        "device_id": str(device.id),
-                        "hostname": device.hostname,
-                        "auth_type": "dynamic",
-                        "requires_password_input": True,
-                    },
+                raise DynamicPasswordRequiredException(
+                    device_info=f"{device.hostname}({device.ip_address})",
+                    device_id=str(device.id),
+                    hostname=device.hostname,
                 )
             dynamic_password = cached_password
         else:
@@ -168,20 +154,21 @@ class AuthenticationManager:
 
         # 检查静态凭据是否完整
         if not device.static_username or not device.static_password:
-            raise BusinessException(
-                f"设备 {device.hostname} 的静态认证凭据不完整",
-                detail={
-                    "device_id": str(device.id),
-                    "hostname": device.hostname,
-                    "auth_type": "static",
-                    "missing_username": not device.static_username,
-                    "missing_password": not device.static_password,
-                },
+            raise CredentialsIncompleteException(
+                device_info=f"{device.hostname}({device.ip_address})",
+                device_id=str(device.id),
+                hostname=device.hostname,
+                missing_username=not device.static_username,
+                missing_password=not device.static_password,
             )
 
         # 检查密码是否为空
         if not device.static_password or device.static_password.strip() == "":
-            raise BusinessException(f"设备 {device.hostname} 的静态密码为空")
+            raise AuthenticationException(
+                device_info=f"{device.hostname}({device.ip_address})",
+                auth_type="static",
+                message="设备的静态密码为空",
+            )
 
         # 解密静态凭据（兼容明文和加密密码）
         try:

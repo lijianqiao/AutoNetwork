@@ -8,16 +8,56 @@
 
 from uuid import UUID
 
+from app.core.network.interfaces import IDeviceDAO
 from app.dao.base import BaseDAO
 from app.models.device import Device
 from app.utils.logger import logger
 
 
-class DeviceDAO(BaseDAO[Device]):
+class DeviceDAO(BaseDAO[Device], IDeviceDAO):
     """设备数据访问层"""
 
     def __init__(self):
         super().__init__(Device)
+
+    async def get_by_id(self, id: UUID, include_deleted: bool = True) -> Device | None:
+        """根据设备ID获取设备
+
+        Args:
+            id: 设备ID
+            include_deleted: 是否包含已删除的设备
+
+        Returns:
+            设备对象或None
+        """
+        return await super().get_by_id(id, include_deleted)
+
+    async def get_by_ids(self, ids: list[UUID]) -> list[Device]:
+        """根据设备ID列表获取设备
+
+        Args:
+            ids: 设备ID列表
+
+        Returns:
+            设备对象列表
+        """
+        return await super().get_by_ids(ids)
+
+    async def get_all(self, include_deleted: bool = True, **filters) -> list[Device]:
+        """获取所有设备
+
+        Args:
+            include_deleted: 是否包含已删除的设备
+            **filters: 过滤条件
+
+        Returns:
+            设备对象列表
+        """
+        try:
+            return await super().get_all(include_deleted=include_deleted, **filters)
+        except Exception as e:
+            logger.error(f"获取设备列表失败: {e}")
+            return []
 
     async def get_by_hostname(self, hostname: str) -> Device | None:
         """根据主机名获取设备"""
@@ -139,16 +179,15 @@ class DeviceDAO(BaseDAO[Device]):
             logger.error(f"停用设备失败: {e}")
             return False
 
-    async def update_last_connected(self, device_id: UUID) -> bool:
+    async def update_last_connected(self, device_id: UUID) -> None:
         """更新设备最后连接时间"""
         try:
             from datetime import datetime
 
-            count = await self.model.filter(id=device_id, is_deleted=False).update(last_connected_at=datetime.now())
-            return count > 0
+            await self.model.filter(id=device_id, is_deleted=False).update(last_connected_at=datetime.now())
         except Exception as e:
             logger.error(f"更新设备连接时间失败: {e}")
-            return False
+            raise
 
     async def get_devices_with_relations(self) -> list[Device]:
         """获取设备及其关联的厂商和基地信息"""

@@ -17,9 +17,18 @@ from scrapli_community.hp.comware.async_driver import AsyncHPComwareDriver
 
 from app.core.exceptions import BusinessException
 from app.core.network.config import get_platform_for_vendor, network_config
+from app.core.network.exceptions import (
+    CommandExecutionException,
+    DeviceConnectionException,
+    NetworkException,
+)
+from app.core.network.interfaces import (
+    DeviceCredentials,
+    IAuthenticationProvider,
+    IConnectionProvider,
+)
 from app.models.device import Device
 from app.models.vendor import Vendor
-from app.services.authentication import AuthenticationManager, DeviceCredentials
 from app.utils.logger import logger
 
 
@@ -110,7 +119,11 @@ class DeviceConnection:
             except Exception as e:
                 logger.error(f"设备 {self.hostname} 执行命令失败: {e}")
                 self.is_connected = False
-                raise BusinessException(f"设备 {self.hostname} 执行命令失败: {e}") from e
+                raise CommandExecutionException(
+                    device_info=f"{self.hostname}({self.ip_address})",
+                    command=command,
+                    detail={"timeout": timeout or network_config.connection.COMMAND_TIMEOUT, "error": str(e)},
+                ) from e
 
     async def is_alive(self) -> bool:
         """检查连接是否存活"""
@@ -181,12 +194,12 @@ class DeviceConnection:
         }
 
 
-class DeviceConnectionManager:
+class DeviceConnectionManager(IConnectionProvider):
     """设备连接管理器"""
 
-    def __init__(self):
+    def __init__(self, auth_provider: IAuthenticationProvider | None = None):
         self.connections: dict[UUID, DeviceConnection] = {}
-        self.auth_manager = AuthenticationManager()
+        self.auth_provider = auth_provider
         self._cleanup_task: asyncio.Task | None = None
         self._health_check_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
@@ -249,7 +262,11 @@ class DeviceConnectionManager:
                 if len(self.connections) >= max_connections:
                     await self._cleanup_idle_connections()
                     if len(self.connections) >= max_connections:
-                        raise BusinessException("连接数已达到上限，请稍后重试")
+                        raise DeviceConnectionException(
+                            device_info=f"{device.hostname}({device.ip_address})",
+                            message="连接数已达到上限，请稍后重试",
+                            detail={"max_connections": max_connections, "current_connections": len(self.connections)},
+                        )
 
                 # 创建新连接
                 connection = await self._create_connection(device, dynamic_password)
@@ -260,13 +277,17 @@ class DeviceConnectionManager:
     async def _create_connection(self, device: Device, dynamic_password: str | None = None) -> DeviceConnection:
         """创建设备连接"""
         try:
+            # 检查认证提供者
+            if not self.auth_provider:
+                raise NetworkException("认证提供者未初始化")
+
             # 获取设备认证凭据
-            credentials = await self.auth_manager.get_device_credentials(device.id, dynamic_password)
+            credentials = await self.auth_provider.get_device_credentials(device.id, dynamic_password)
 
             # 获取厂商信息
             vendor = await device.vendor
             if not vendor:
-                raise BusinessException(f"设备 {device.hostname} 缺少厂商信息")
+                raise NetworkException(f"设备 {device.hostname} 缺少厂商信息")
 
             # 确定Scrapli平台
             platform = self._get_scrapli_platform(vendor)
@@ -311,7 +332,11 @@ class DeviceConnectionManager:
         except Exception as e:
             self._stats["connection_failures"] += 1
             logger.error(f"创建设备 {device.hostname} 连接失败: {e}")
-            raise BusinessException(f"创建设备连接失败: {e}") from e
+            raise DeviceConnectionException(
+                device_info=f"{device.hostname}({device.ip_address})",
+                message="创建设备连接失败",
+                detail={"error": str(e)},
+            ) from e
 
     def _get_scrapli_platform(self, vendor: Vendor) -> str:
         """获取Scrapli平台标识"""
@@ -420,7 +445,7 @@ class DeviceConnectionManager:
             if unhealthy_connections:
                 logger.info(f"健康检查移除了 {len(unhealthy_connections)} 个不健康连接")
 
-    def get_connection_stats(self) -> dict[str, Any]:
+    async def get_connection_stats(self) -> dict[str, Any]:
         """获取连接统计信息"""
         total_connections = len(self.connections)
         active_connections = 0

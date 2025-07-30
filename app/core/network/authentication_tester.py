@@ -12,10 +12,17 @@ from typing import Any
 from uuid import UUID
 
 from app.core.exceptions import BusinessException
-from app.core.network.connection_manager import DeviceConnectionManager
-from app.dao.device import DeviceDAO
+from app.core.network.exceptions import (
+    AuthenticationException,
+    DeviceConnectionException,
+    NetworkException,
+)
+from app.core.network.interfaces import (
+    IAuthenticationProvider,
+    IConnectionProvider,
+    IDeviceDAO,
+)
 from app.models.device import Device
-from app.services.authentication import AuthenticationManager
 from app.utils.logger import logger
 
 
@@ -116,10 +123,15 @@ class BatchTestResult:
 class AuthenticationTester:
     """设备认证测试器"""
 
-    def __init__(self):
-        self.connection_manager = DeviceConnectionManager()
-        self.auth_manager = AuthenticationManager()
-        self.device_dao = DeviceDAO()
+    def __init__(
+        self,
+        auth_provider: IAuthenticationProvider,
+        connection_provider: IConnectionProvider,
+        device_dao: IDeviceDAO,
+    ):
+        self.auth_provider = auth_provider
+        self.connection_provider = connection_provider
+        self.device_dao = device_dao
 
     async def test_single_device(
         self, device: Device, dynamic_password: str | None = None, test_command: str = "display version"
@@ -131,15 +143,15 @@ class AuthenticationTester:
             logger.info(f"开始测试设备 {device.hostname} 的认证")
 
             # 获取设备认证凭据
-            credentials = await self.auth_manager.get_device_credentials(device.id, dynamic_password)
+            credentials = await self.auth_provider.get_device_credentials(device.id, dynamic_password)
 
             # 获取厂商信息
             vendor = await device.vendor
             if not vendor:
-                raise BusinessException(f"设备 {device.hostname} 缺少厂商信息")
+                raise NetworkException(f"设备 {device.hostname} 缺少厂商信息")
 
             # 测试连接
-            test_result = await self.connection_manager.test_connection(device, dynamic_password)
+            test_result = await self.connection_provider.test_connection(device, dynamic_password)
 
             execution_time = (datetime.now() - start_time).total_seconds()
 
@@ -162,7 +174,7 @@ class AuthenticationTester:
 
             return result
 
-        except Exception as e:
+        except (AuthenticationException, DeviceConnectionException, NetworkException) as e:
             execution_time = (datetime.now() - start_time).total_seconds()
             logger.error(f"设备 {device.hostname} 认证测试异常: {e}")
 
@@ -177,12 +189,27 @@ class AuthenticationTester:
                 auth_type=device.auth_type,
                 response_data=None,
             )
+        except Exception as e:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"设备 {device.hostname} 认证测试未知异常: {e}")
+
+            return AuthenticationTestResult(
+                device_id=device.id,
+                hostname=device.hostname,
+                ip_address=device.ip_address,
+                success=False,
+                execution_time=execution_time,
+                error_message=f"未知错误: {str(e)}",
+                platform=None,
+                auth_type=device.auth_type,
+                response_data=None,
+            )
 
     async def test_device_by_id(self, device_id: UUID, dynamic_password: str | None = None) -> AuthenticationTestResult:
         """根据设备ID测试认证"""
         device = await self.device_dao.get_by_id(device_id)
         if not device:
-            raise BusinessException(f"设备不存在: {device_id}")
+            raise NetworkException(f"设备不存在: {device_id}")
 
         return await self.test_single_device(device, dynamic_password)
 
