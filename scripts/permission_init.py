@@ -48,6 +48,7 @@ class PermissionInitializer:
             "device_config": "设备配置",
             "network_query": "网络查询",
             "import_export": "导入导出",
+            "cli": "CLI",
         }
 
         # 操作名称映射
@@ -81,6 +82,10 @@ class PermissionInitializer:
             "device_template": "设备导入模板",
             "device_import": "设备数据导入",
             "device_export": "设备数据导出",
+            "cli_access": "CLI访问",
+            "cli_execute": "CLI执行",
+            "cli_config": "CLI配置",
+            "cli_session_manage": "CLI会话管理",
         }
 
         # 特殊权限名称覆盖（用于处理无法通过规则生成的特殊情况）
@@ -209,6 +214,10 @@ class PermissionInitializer:
                     Permissions.IMPORT_EXPORT_DEVICE_TEMPLATE,
                     Permissions.IMPORT_EXPORT_DEVICE_IMPORT,
                     Permissions.IMPORT_EXPORT_DEVICE_EXPORT,
+                    Permissions.CLI_ACCESS,
+                    Permissions.CLI_EXECUTE,
+                    Permissions.CLI_CONFIG,
+                    Permissions.CLI_SESSION_MANAGE,
                 ],
             },
             {

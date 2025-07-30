@@ -17,6 +17,11 @@ from app.core.permissions.simple_decorators import (
 )
 from app.schemas.base import SuccessResponse
 from app.schemas.device_config import (
+    BatchConfigCompareRequest,
+    BatchConfigCompareResponse,
+    CompareWithLatestRequest,
+    ConfigDiffSummaryRequest,
+    ConfigDiffSummaryResponse,
     DeviceConfigBackupRequest,
     DeviceConfigBackupResponse,
     DeviceConfigBackupResult,
@@ -30,8 +35,12 @@ from app.schemas.device_config import (
     DeviceConfigListResponse,
     DeviceConfigResponse,
     DeviceConfigUpdateRequest,
+    ExportDiffToHtmlRequest,
+    SmartConfigCompareRequest,
+    SmartConfigCompareResponse,
 )
 from app.services.device_config import DeviceConfigService
+from app.utils.config_differ import DiffType
 from app.utils.deps import OperationContext, get_device_config_service
 
 router = APIRouter(prefix="/device-configs", tags=["设备配置管理"])
@@ -125,24 +134,24 @@ async def compare_device_configs(
 
     # 转换为API响应格式
     differences = []
-    for diff in comparison_result["differences"]:
+    for diff in comparison_result.diff_lines:
         differences.append(
             {
-                "line_number": diff["line_number"],
-                "change_type": "modified",  # 简化处理，都标记为修改
-                "old_content": diff["config1_line"],
-                "new_content": diff["config2_line"],
+                "line_number": diff.line_number,
+                "change_type": diff.diff_type.value,
+                "old_content": diff.content if diff.diff_type == DiffType.REMOVED else "",
+                "new_content": diff.content if diff.diff_type == DiffType.ADDED else "",
             }
         )
 
     return DeviceConfigCompareResponse(
-        config1_info=comparison_result["config1"],
-        config2_info=comparison_result["config2"],
-        is_identical=comparison_result["is_identical"],
+        config1_info=DeviceConfigResponse.model_validate(comparison_result.config1_info),
+        config2_info=DeviceConfigResponse.model_validate(comparison_result.config2_info),
+        is_identical=comparison_result.summary.get("is_identical", True),
         differences=differences,
-        added_lines=0,  # TODO: 实现具体的增减行数统计
-        removed_lines=0,
-        modified_lines=len(differences),
+        added_lines=comparison_result.summary.get("lines_added", 0),
+        removed_lines=comparison_result.summary.get("lines_removed", 0),
+        modified_lines=comparison_result.summary.get("lines_modified", 0),
     )
 
 
@@ -383,3 +392,222 @@ async def validate_config_content(
 ):
     """验证配置内容的有效性"""
     return await service.validate_config_content(config_content, config_type)
+
+
+# ===== 智能配置差异分析功能 =====
+
+
+@router.post("/smart-compare", response_model=SmartConfigCompareResponse, summary="智能配置差异对比")
+async def smart_compare_configs(
+    request: SmartConfigCompareRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
+):
+    """使用智能算法对比两个配置快照，提供详细的差异分析"""
+    try:
+        diff_result = await service.compare_configs(
+            config1_id=request.config1_id,
+            config2_id=request.config2_id,
+            ignore_whitespace=request.ignore_whitespace,
+            ignore_comments=request.ignore_comments,
+            context_lines=request.context_lines,
+        )
+
+        # 转换为响应格式
+        response_data = {
+            "config1_info": diff_result.config1_info,
+            "config2_info": diff_result.config2_info,
+            "diff_lines": [
+                {
+                    "line_number": line.line_number,
+                    "content": line.content,
+                    "diff_type": line.diff_type.value,
+                    "section": line.section.value,
+                    "indent_level": line.indent_level,
+                    "is_comment": line.is_comment,
+                    "original_line_number": line.original_line_number,
+                }
+                for line in diff_result.diff_lines
+            ],
+            "summary": diff_result.summary,
+            "sections_changed": [section.value for section in diff_result.sections_changed],
+            "unified_diff": diff_result.unified_diff,
+            "side_by_side_diff": [
+                {
+                    "left_line_no": item.get("left_line_no"),
+                    "right_line_no": item.get("right_line_no"),
+                    "left_content": item.get("left_content", ""),
+                    "right_content": item.get("right_content", ""),
+                    "type": item["type"],
+                }
+                for item in diff_result.side_by_side_diff
+            ],
+        }
+
+        return SmartConfigCompareResponse(**response_data)
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"配置对比失败: {str(e)}") from e
+
+
+@router.post("/compare-with-latest", response_model=SmartConfigCompareResponse, summary="与最新配置对比")
+async def compare_with_latest_config(
+    request: CompareWithLatestRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
+):
+    """将指定配置与最新配置进行智能对比"""
+    try:
+        diff_result = await service.compare_with_latest(
+            config_id=request.config_id,
+            ignore_whitespace=request.ignore_whitespace,
+            ignore_comments=request.ignore_comments,
+        )
+
+        # 转换为响应格式（复用上面的逻辑）
+        response_data = {
+            "config1_info": diff_result.config1_info,
+            "config2_info": diff_result.config2_info,
+            "diff_lines": [
+                {
+                    "line_number": line.line_number,
+                    "content": line.content,
+                    "diff_type": line.diff_type.value,
+                    "section": line.section.value,
+                    "indent_level": line.indent_level,
+                    "is_comment": line.is_comment,
+                    "original_line_number": line.original_line_number,
+                }
+                for line in diff_result.diff_lines
+            ],
+            "summary": diff_result.summary,
+            "sections_changed": [section.value for section in diff_result.sections_changed],
+            "unified_diff": diff_result.unified_diff,
+            "side_by_side_diff": [
+                {
+                    "left_line_no": item.get("left_line_no"),
+                    "right_line_no": item.get("right_line_no"),
+                    "left_content": item.get("left_content", ""),
+                    "right_content": item.get("right_content", ""),
+                    "type": item["type"],
+                }
+                for item in diff_result.side_by_side_diff
+            ],
+        }
+
+        return SmartConfigCompareResponse(**response_data)
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"配置对比失败: {str(e)}") from e
+
+
+@router.post("/diff-summary", response_model=ConfigDiffSummaryResponse, summary="获取配置变更摘要")
+async def get_config_diff_summary(
+    request: ConfigDiffSummaryRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
+):
+    """获取设备在指定时间范围内的配置变更摘要"""
+    try:
+        summary = await service.get_config_diff_summary(
+            device_id=request.device_id, days=request.days, config_type=request.config_type
+        )
+
+        return ConfigDiffSummaryResponse(**summary)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取配置变更摘要失败: {str(e)}"
+        ) from e
+
+
+@router.post("/batch-compare", response_model=BatchConfigCompareResponse, summary="批量配置对比")
+async def batch_compare_configs(
+    request: BatchConfigCompareRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
+):
+    """批量对比多对配置快照"""
+    try:
+        results = await service.batch_compare_configs(
+            comparison_pairs=request.comparison_pairs,
+            ignore_whitespace=request.ignore_whitespace,
+            ignore_comments=request.ignore_comments,
+        )
+
+        # 统计成功和失败数量
+        successful_count = sum(1 for result in results if result["success"])
+        failed_count = len(results) - successful_count
+
+        # 转换结果格式
+        batch_results = []
+        for result in results:
+            if result["success"]:
+                batch_results.append(
+                    {
+                        "index": result["index"],
+                        "config1_id": result["config1_id"],
+                        "config2_id": result["config2_id"],
+                        "success": True,
+                        "summary": result["summary"],
+                        "sections_changed": result["sections_changed"],
+                        "error": None,
+                    }
+                )
+            else:
+                batch_results.append(
+                    {
+                        "index": result["index"],
+                        "config1_id": result["config1_id"],
+                        "config2_id": result["config2_id"],
+                        "success": False,
+                        "summary": None,
+                        "sections_changed": None,
+                        "error": result["error"],
+                    }
+                )
+
+        return BatchConfigCompareResponse(
+            total_comparisons=len(results),
+            successful_comparisons=successful_count,
+            failed_comparisons=failed_count,
+            results=batch_results,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"批量配置对比失败: {str(e)}"
+        ) from e
+
+
+@router.post("/export-diff-html", response_model=dict[str, str], summary="导出差异为HTML")
+async def export_diff_to_html(
+    request: ExportDiffToHtmlRequest,
+    service: DeviceConfigService = Depends(get_device_config_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
+):
+    """将配置差异导出为HTML格式的报告"""
+    try:
+        html_content = await service.export_diff_to_html(
+            config1_id=request.config1_id,
+            config2_id=request.config2_id,
+            ignore_whitespace=request.ignore_whitespace,
+            ignore_comments=request.ignore_comments,
+        )
+
+        return {
+            "html_content": html_content,
+            "content_type": "text/html",
+            "filename": f"config_diff_{request.config1_id}_{request.config2_id}.html",
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"导出差异HTML失败: {str(e)}"
+        ) from e

@@ -14,6 +14,7 @@ from uuid import UUID
 from app.dao.device_config import DeviceConfigDAO
 from app.models.device_config import DeviceConfig
 from app.services.base import BaseService
+from app.utils.config_differ import ConfigDiffResult, NetworkConfigDiffer
 from app.utils.deps import OperationContext
 from app.utils.logger import logger
 from app.utils.operation_logger import log_create_with_context, log_delete_with_context, log_update_with_context
@@ -25,6 +26,7 @@ class DeviceConfigService(BaseService[DeviceConfig]):
     def __init__(self):
         super().__init__(DeviceConfigDAO())
         self.dao: DeviceConfigDAO = self.dao
+        self.config_differ = NetworkConfigDiffer()
 
     def _generate_config_hash(self, config_content: str) -> str:
         """生成配置内容的哈希值"""
@@ -83,51 +85,254 @@ class DeviceConfigService(BaseService[DeviceConfig]):
         """获取设备的最新配置快照"""
         return await self.dao.get_latest_config(device_id, config_type)
 
-    async def compare_configs(self, config1_id: UUID, config2_id: UUID) -> dict[str, Any]:
-        """对比两个配置快照"""
+    async def compare_configs(
+        self,
+        config1_id: UUID,
+        config2_id: UUID,
+        ignore_whitespace: bool = True,
+        ignore_comments: bool = False,
+        context_lines: int = 3,
+    ) -> ConfigDiffResult:
+        """智能对比两个配置快照
+
+        Args:
+            config1_id: 第一个配置快照ID
+            config2_id: 第二个配置快照ID
+            ignore_whitespace: 是否忽略空白字符差异
+            ignore_comments: 是否忽略注释行差异
+            context_lines: 上下文行数
+
+        Returns:
+            配置差异结果
+        """
         config1 = await self.dao.get_by_id(config1_id)
         config2 = await self.dao.get_by_id(config2_id)
 
         if not config1 or not config2:
             raise ValueError("配置快照不存在")
 
-        # 简单的配置对比
-        lines1 = config1.config_content.splitlines()
-        lines2 = config2.config_content.splitlines()
+        # 构建配置信息
+        config1_info = {
+            "id": str(config1.id),
+            "created_at": config1.created_at.isoformat() if config1.created_at else None,
+            "config_type": config1.config_type,
+            "config_hash": config1.config_hash,
+            "backup_reason": config1.backup_reason,
+            "device_id": str(config1.device.id) if config1.device.id else None,
+        }
 
-        differences = []
-        max_lines = max(len(lines1), len(lines2))
+        config2_info = {
+            "id": str(config2.id),
+            "created_at": config2.created_at.isoformat() if config2.created_at else None,
+            "config_type": config2.config_type,
+            "config_hash": config2.config_hash,
+            "backup_reason": config2.backup_reason,
+            "device_id": str(config2.device.id) if config2.device.id else None,
+        }
 
-        for i in range(max_lines):
-            line1 = lines1[i] if i < len(lines1) else ""
-            line2 = lines2[i] if i < len(lines2) else ""
+        # 使用智能差异分析器
+        diff_result = self.config_differ.analyze_config_differences(
+            config1_content=config1.config_content,
+            config2_content=config2.config_content,
+            config1_info=config1_info,
+            config2_info=config2_info,
+            ignore_whitespace=ignore_whitespace,
+            ignore_comments=ignore_comments,
+            context_lines=context_lines,
+        )
 
-            if line1 != line2:
-                differences.append(
+        logger.info(
+            f"配置对比完成: {config1_id} vs {config2_id}, "
+            f"差异行数: {diff_result.summary['total_differences']}, "
+            f"相似度: {diff_result.summary['similarity_ratio']:.2%}"
+        )
+
+        return diff_result
+
+    async def compare_with_latest(
+        self, config_id: UUID, ignore_whitespace: bool = True, ignore_comments: bool = False
+    ) -> ConfigDiffResult:
+        """将指定配置与最新配置进行对比
+
+        Args:
+            config_id: 要对比的配置快照ID
+            ignore_whitespace: 是否忽略空白字符差异
+            ignore_comments: 是否忽略注释行差异
+
+        Returns:
+            配置差异结果
+        """
+        config = await self.dao.get_by_id(config_id)
+        if not config:
+            raise ValueError("配置快照不存在")
+
+        # 获取同类型的最新配置
+        latest_config = await self.dao.get_latest_config(config.device.id, config.config_type)
+        if not latest_config:
+            raise ValueError("未找到最新配置快照")
+
+        if latest_config.id == config.id:
+            raise ValueError("指定的配置已经是最新配置")
+
+        return await self.compare_configs(
+            config1_id=config_id,
+            config2_id=latest_config.id,
+            ignore_whitespace=ignore_whitespace,
+            ignore_comments=ignore_comments,
+        )
+
+    async def export_diff_to_html(
+        self, config1_id: UUID, config2_id: UUID, ignore_whitespace: bool = True, ignore_comments: bool = False
+    ) -> str:
+        """将配置差异导出为HTML格式
+
+        Args:
+            config1_id: 第一个配置快照ID
+            config2_id: 第二个配置快照ID
+            ignore_whitespace: 是否忽略空白字符差异
+            ignore_comments: 是否忽略注释行差异
+
+        Returns:
+            HTML格式的差异报告
+        """
+        diff_result = await self.compare_configs(
+            config1_id=config1_id,
+            config2_id=config2_id,
+            ignore_whitespace=ignore_whitespace,
+            ignore_comments=ignore_comments,
+        )
+
+        return self.config_differ.export_diff_to_html(diff_result)
+
+    async def get_config_diff_summary(
+        self, device_id: UUID, days: int = 30, config_type: str = "running"
+    ) -> dict[str, Any]:
+        """获取设备配置变更摘要
+
+        Args:
+            device_id: 设备ID
+            days: 查看最近几天的变更
+            config_type: 配置类型
+
+        Returns:
+            配置变更摘要
+        """
+        # 获取指定时间范围内的配置快照
+        configs = await self.dao.get_config_changes(device_id, days)
+        configs = [c for c in configs if c.config_type == config_type]
+
+        if len(configs) < 2:
+            return {
+                "device_id": str(device_id),
+                "config_type": config_type,
+                "days": days,
+                "total_snapshots": len(configs),
+                "has_changes": False,
+                "message": "时间范围内配置快照不足，无法进行变更分析",
+            }
+
+        # 对比最新和最旧的配置
+        latest_config = configs[0]  # 按时间倒序排列，第一个是最新的
+        oldest_config = configs[-1]  # 最后一个是最旧的
+
+        diff_result = await self.compare_configs(
+            config1_id=oldest_config.id, config2_id=latest_config.id, ignore_whitespace=True, ignore_comments=True
+        )
+
+        # 统计中间变更次数
+        change_points = []
+        for i in range(1, len(configs)):
+            prev_config = configs[i]
+            curr_config = configs[i - 1]
+
+            # 比较哈希值，如果不同则表示发生了变更
+            if prev_config.config_hash != curr_config.config_hash:
+                change_points.append(
                     {
-                        "line_number": i + 1,
-                        "config1_line": line1,
-                        "config2_line": line2,
+                        "from_config_id": str(prev_config.id),
+                        "to_config_id": str(curr_config.id),
+                        "change_time": curr_config.created_at.isoformat() if curr_config.created_at else None,
+                        "backup_reason": curr_config.backup_reason,
                     }
                 )
 
         return {
-            "config1": {
-                "id": config1.id,
-                "created_at": config1.created_at,
-                "config_type": config1.config_type,
-                "config_hash": config1.config_hash,
+            "device_id": str(device_id),
+            "config_type": config_type,
+            "days": days,
+            "total_snapshots": len(configs),
+            "total_changes": len(change_points),
+            "has_changes": len(change_points) > 0,
+            "latest_config": {
+                "id": str(latest_config.id),
+                "created_at": latest_config.created_at.isoformat() if latest_config.created_at else None,
+                "backup_reason": latest_config.backup_reason,
             },
-            "config2": {
-                "id": config2.id,
-                "created_at": config2.created_at,
-                "config_type": config2.config_type,
-                "config_hash": config2.config_hash,
+            "oldest_config": {
+                "id": str(oldest_config.id),
+                "created_at": oldest_config.created_at.isoformat() if oldest_config.created_at else None,
+                "backup_reason": oldest_config.backup_reason,
             },
-            "differences": differences,
-            "total_differences": len(differences),
-            "is_identical": len(differences) == 0,
+            "overall_diff_summary": {
+                "total_differences": diff_result.summary["total_differences"],
+                "lines_added": diff_result.summary["lines_added"],
+                "lines_removed": diff_result.summary["lines_removed"],
+                "similarity_ratio": diff_result.summary["similarity_ratio"],
+                "sections_affected": diff_result.summary["sections_affected"],
+                "section_statistics": diff_result.summary["section_statistics"],
+            },
+            "change_points": change_points,
+            "sections_changed": [section.value for section in diff_result.sections_changed],
         }
+
+    async def batch_compare_configs(
+        self, comparison_pairs: list[tuple[UUID, UUID]], ignore_whitespace: bool = True, ignore_comments: bool = False
+    ) -> list[dict[str, Any]]:
+        """批量对比配置快照
+
+        Args:
+            comparison_pairs: 配置对比对列表 [(config1_id, config2_id), ...]
+            ignore_whitespace: 是否忽略空白字符差异
+            ignore_comments: 是否忽略注释行差异
+
+        Returns:
+            批量对比结果列表
+        """
+        results = []
+
+        for i, (config1_id, config2_id) in enumerate(comparison_pairs):
+            try:
+                diff_result = await self.compare_configs(
+                    config1_id=config1_id,
+                    config2_id=config2_id,
+                    ignore_whitespace=ignore_whitespace,
+                    ignore_comments=ignore_comments,
+                )
+
+                results.append(
+                    {
+                        "index": i,
+                        "config1_id": str(config1_id),
+                        "config2_id": str(config2_id),
+                        "success": True,
+                        "summary": diff_result.summary,
+                        "sections_changed": [section.value for section in diff_result.sections_changed],
+                    }
+                )
+
+            except Exception as e:
+                logger.error(f"批量对比配置失败 {config1_id} vs {config2_id}: {e}")
+                results.append(
+                    {
+                        "index": i,
+                        "config1_id": str(config1_id),
+                        "config2_id": str(config2_id),
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return results
 
     async def get_config_changes(self, device_id: UUID, days: int = 30) -> list[DeviceConfig]:
         """获取设备配置变更历史"""

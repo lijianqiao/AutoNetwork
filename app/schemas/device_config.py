@@ -6,7 +6,7 @@
 @Docs: 设备配置快照管理相关的Pydantic模型
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -169,3 +169,147 @@ class DeviceConfigHistoryRequest(BaseModel):
     device_id: ObjectUUID = Field(description="设备ID")
     config_type: Literal["running", "startup"] | None = Field(default=None, description="配置类型筛选")
     limit: int = Field(default=10, description="返回数量限制", ge=1, le=100)
+
+
+# ===== 智能配置差异分析相关Schema =====
+
+
+class SmartConfigCompareRequest(BaseModel):
+    """智能配置对比请求"""
+
+    config1_id: ObjectUUID = Field(description="配置1的ID")
+    config2_id: ObjectUUID = Field(description="配置2的ID")
+    ignore_whitespace: bool = Field(default=True, description="是否忽略空白字符差异")
+    ignore_comments: bool = Field(default=False, description="是否忽略注释行差异")
+    context_lines: int = Field(default=3, description="上下文行数", ge=0, le=10)
+
+
+class ConfigDiffLine(BaseModel):
+    """配置差异行"""
+
+    line_number: int = Field(description="行号")
+    content: str = Field(description="行内容")
+    diff_type: Literal["added", "removed", "modified", "moved", "unchanged"] = Field(description="差异类型")
+    section: Literal["interface", "routing", "access-list", "vlan", "system", "security", "qos", "other"] = Field(
+        description="配置段落类型"
+    )
+    indent_level: int = Field(description="缩进级别")
+    is_comment: bool = Field(description="是否为注释行")
+    original_line_number: int | None = Field(default=None, description="原始行号（用于moved类型）")
+
+
+class ConfigSideBySideDiff(BaseModel):
+    """并排差异视图项"""
+
+    left_line_no: int | None = Field(description="左侧行号")
+    right_line_no: int | None = Field(description="右侧行号")
+    left_content: str = Field(description="左侧内容")
+    right_content: str = Field(description="右侧内容")
+    type: Literal["equal", "delete", "insert", "replace"] = Field(description="差异类型")
+
+
+class ConfigDiffSummary(BaseModel):
+    """配置差异摘要"""
+
+    total_differences: int = Field(description="总差异行数")
+    lines_added: int = Field(description="新增行数")
+    lines_removed: int = Field(description="删除行数")
+    lines_modified: int = Field(description="修改行数")
+    sections_affected: int = Field(description="受影响的段落数")
+    section_statistics: dict[str, dict[str, int]] = Field(description="各段落统计信息")
+    similarity_ratio: float = Field(description="相似度比例", ge=0.0, le=1.0)
+    is_identical: bool = Field(description="是否完全相同")
+
+
+class SmartConfigCompareResponse(BaseModel):
+    """智能配置对比响应"""
+
+    config1_info: dict[str, Any] = Field(description="配置1信息")
+    config2_info: dict[str, Any] = Field(description="配置2信息")
+    diff_lines: list[ConfigDiffLine] = Field(description="差异行列表")
+    summary: ConfigDiffSummary = Field(description="差异摘要")
+    sections_changed: list[str] = Field(description="变更的配置段落")
+    unified_diff: str = Field(description="统一差异格式")
+    side_by_side_diff: list[ConfigSideBySideDiff] = Field(description="并排差异视图")
+
+
+class CompareWithLatestRequest(BaseModel):
+    """与最新配置对比请求"""
+
+    config_id: ObjectUUID = Field(description="要对比的配置快照ID")
+    ignore_whitespace: bool = Field(default=True, description="是否忽略空白字符差异")
+    ignore_comments: bool = Field(default=False, description="是否忽略注释行差异")
+
+
+class ConfigDiffSummaryRequest(BaseModel):
+    """配置差异摘要请求"""
+
+    device_id: ObjectUUID = Field(description="设备ID")
+    days: int = Field(default=30, description="查看最近几天的变更", ge=1, le=365)
+    config_type: Literal["running", "startup"] = Field(default="running", description="配置类型")
+
+
+class ConfigChangePoint(BaseModel):
+    """配置变更点"""
+
+    from_config_id: str = Field(description="变更前配置ID")
+    to_config_id: str = Field(description="变更后配置ID")
+    change_time: str | None = Field(description="变更时间")
+    backup_reason: str | None = Field(description="备份原因")
+
+
+class ConfigDiffSummaryResponse(BaseModel):
+    """配置差异摘要响应"""
+
+    device_id: str = Field(description="设备ID")
+    config_type: str = Field(description="配置类型")
+    days: int = Field(description="查看天数")
+    total_snapshots: int = Field(description="总快照数")
+    total_changes: int = Field(description="总变更次数")
+    has_changes: bool = Field(description="是否有变更")
+    latest_config: dict[str, Any] = Field(description="最新配置信息")
+    oldest_config: dict[str, Any] = Field(description="最旧配置信息")
+    overall_diff_summary: ConfigDiffSummary = Field(description="整体差异摘要")
+    change_points: list[ConfigChangePoint] = Field(description="变更点列表")
+    sections_changed: list[str] = Field(description="变更的配置段落")
+    message: str | None = Field(default=None, description="提示信息")
+
+
+class BatchConfigCompareRequest(BaseModel):
+    """批量配置对比请求"""
+
+    comparison_pairs: list[tuple[ObjectUUID, ObjectUUID]] = Field(
+        description="配置对比对列表", min_length=1, max_length=50
+    )
+    ignore_whitespace: bool = Field(default=True, description="是否忽略空白字符差异")
+    ignore_comments: bool = Field(default=False, description="是否忽略注释行差异")
+
+
+class BatchConfigCompareResult(BaseModel):
+    """批量配置对比结果项"""
+
+    index: int = Field(description="对比索引")
+    config1_id: str = Field(description="配置1 ID")
+    config2_id: str = Field(description="配置2 ID")
+    success: bool = Field(description="对比是否成功")
+    summary: ConfigDiffSummary | None = Field(default=None, description="差异摘要")
+    sections_changed: list[str] | None = Field(default=None, description="变更的配置段落")
+    error: str | None = Field(default=None, description="错误信息")
+
+
+class BatchConfigCompareResponse(BaseModel):
+    """批量配置对比响应"""
+
+    total_comparisons: int = Field(description="总对比数")
+    successful_comparisons: int = Field(description="成功对比数")
+    failed_comparisons: int = Field(description="失败对比数")
+    results: list[BatchConfigCompareResult] = Field(description="详细结果列表")
+
+
+class ExportDiffToHtmlRequest(BaseModel):
+    """导出差异为HTML请求"""
+
+    config1_id: ObjectUUID = Field(description="配置1的ID")
+    config2_id: ObjectUUID = Field(description="配置2的ID")
+    ignore_whitespace: bool = Field(default=True, description="是否忽略空白字符差异")
+    ignore_comments: bool = Field(default=False, description="是否忽略注释行差异")
