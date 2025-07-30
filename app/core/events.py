@@ -55,6 +55,9 @@ async def startup(app: FastAPI) -> None:
     # 初始化设备连接池
     await init_device_connection_pool()
 
+    # 初始化CLI会话管理器
+    await init_cli_session_manager()
+
     logger.info(f"应用程序 {settings.APP_NAME} 启动完成")
 
 
@@ -71,6 +74,9 @@ async def shutdown(app: FastAPI) -> None:
 
     # 关闭设备连接池
     await close_device_connection_pool()
+
+    # 关闭CLI会话管理器
+    await close_cli_session_manager()
 
     # 关闭Redis连接
     await clear_all_permission_cache()  # 清除权限缓存
@@ -197,3 +203,34 @@ async def close_device_connection_pool() -> None:
 
     except Exception as e:
         logger.error(f"关闭设备连接池时出错: {e}")
+
+
+async def init_cli_session_manager() -> None:
+    """初始化CLI会话管理器"""
+    try:
+        logger.info("正在初始化CLI会话管理器...")
+        from app.core.network.websocket_cli import start_cli_session_manager
+
+        # 启动全局CLI会话管理器
+        await start_cli_session_manager()
+
+        logger.info("CLI会话管理器初始化完成")
+
+    except Exception as e:
+        logger.error(f"CLI会话管理器初始化失败: {e}")
+        logger.info("CLI会话管理器将在首次使用时延迟初始化")
+
+
+async def close_cli_session_manager() -> None:
+    """关闭CLI会话管理器"""
+    try:
+        logger.info("正在关闭CLI会话管理器...")
+        from app.core.network.websocket_cli import stop_cli_session_manager
+
+        # 关闭全局CLI会话管理器
+        await stop_cli_session_manager()
+
+        logger.info("CLI会话管理器已关闭")
+
+    except Exception as e:
+        logger.error(f"关闭CLI会话管理器时出错: {e}")

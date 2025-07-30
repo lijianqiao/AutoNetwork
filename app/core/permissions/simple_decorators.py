@@ -487,6 +487,11 @@ class Permissions:
     AUTHENTICATION_READ = "authentication:read"
     AUTHENTICATION_MANAGE = "authentication:manage"
     AUTHENTICATION_TEST = "authentication:test"
+    # CLI终端功能
+    CLI_ACCESS = "cli:access"  # CLI终端访问权限
+    CLI_EXECUTE = "cli:execute"  # CLI命令执行权限
+    CLI_CONFIG = "cli:config"  # CLI配置命令权限
+    CLI_SESSION_MANAGE = "cli:session_manage"  # CLI会话管理权限
 
 
 # ===== 向后兼容函数 =====

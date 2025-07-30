@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLI终端 - 网络自动化平台</title>
+    
+    <!-- Xterm.js CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+    
+    <!-- 自定义样式 -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .cli-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 页面头部 */
+        .header {
+            background: #ffffff;
+            border-bottom: 1px solid #e1e4e8;
+            padding: 16px 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-left h1 {
+            font-size: 24px;
+            color: #24292e;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-left .description {
+            color: #586069;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #24292e;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: #f6f8fa;
+        }
+
+        .btn-primary {
+            background: #0366d6;
+            color: #ffffff;
+            border-color: #0366d6;
+        }
+
+        .btn-primary:hover {
+            background: #0256cc;
+        }
+
+        .btn-danger {
+            background: #d73a49;
+            color: #ffffff;
+            border-color: #d73a49;
+        }
+
+        .btn-danger:hover {
+            background: #cb2431;
+        }
+
+        /* 终端标签页 */
+        .terminal-tabs {
+            background: #ffffff;
+            border-bottom: 1px solid #e1e4e8;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            min-height: 48px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: transparent;
+            cursor: pointer;
+            margin-right: 4px;
+            border-radius: 6px 6px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #586069;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background: #f6f8fa;
+            border-color: #e1e4e8;
+            color: #24292e;
+        }
+
+        .tab:hover:not(.active) {
+            background: #f6f8fa;
+        }
+
+        .tab-close {
+            margin-left: 8px;
+            padding: 2px;
+            border-radius: 3px;
+            cursor: pointer;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+
+        .tab-close:hover {
+            opacity: 1;
+            background: rgba(255, 0, 0, 0.1);
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+            margin-left: 4px;
+        }
+
+        .connection-dot.disconnected {
+            background: #dc3545;
+        }
+
+        /* 连接配置面板 */
+        .config-panel {
+            background: #ffffff;
+            border-bottom: 1px solid #e1e4e8;
+            padding: 20px;
+            display: none;
+        }
+
+        .config-panel.show {
+            display: block;
+        }
+
+        .config-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e1e4e8;
+        }
+
+        .config-tab {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            color: #586069;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .config-tab.active {
+            color: #0366d6;
+            border-bottom-color: #0366d6;
+        }
+
+        .config-content {
+            display: none;
+        }
+
+        .config-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #24292e;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d1d5da;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #0366d6;
+            box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.1);
+        }
+
+        .form-row {
+            display: flex;
+            gap: 16px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        /* 终端工具栏 */
+        .terminal-toolbar {
+            background: #2d2d30;
+            color: #cccccc;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            border-bottom: 1px solid #3e3e42;
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+        }
+
+        .status-indicator.disconnected {
+            background: #dc3545;
+        }
+
+        .status-indicator.connecting {
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .toolbar-right {
+            display: flex;
+            gap: 8px;
+        }
+
+        .toolbar-btn {
+            padding: 4px 8px;
+            background: transparent;
+            border: 1px solid #555;
+            color: #cccccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .toolbar-btn:hover {
+            background: #404040;
+        }
+
+        /* 终端容器 */
+        .terminal-container {
+            flex: 1;
+            background: #1e1e1e;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .terminal-wrapper {
+            height: 100%;
+            padding: 10px;
+        }
+
+        /* 状态页面 */
+        .status-page {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            background: #ffffff;
+            color: #586069;
+        }
+
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            color: #d1d5da;
+        }
+
+        .status-title {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #24292e;
+        }
+
+        .status-description {
+            margin-bottom: 24px;
+            text-align: center;
+            max-width: 400px;
+            line-height: 1.5;
+        }
+
+        /* 会话管理模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: #ffffff;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #e1e4e8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            color: #586069;
+        }
+
+        .modal-body {
+            padding: 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        /* 会话表格 */
+        .sessions-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+
+        .sessions-table th,
+        .sessions-table td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #e1e4e8;
+        }
+
+        .sessions-table th {
+            background: #f6f8fa;
+            font-weight: 600;
+            color: #24292e;
+        }
+
+        .sessions-table tr:hover {
+            background: #f6f8fa;
+        }
+
+        .session-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .session-status.connected {
+            background: #e6ffed;
+            color: #28a745;
+        }
+
+        .session-status.disconnected {
+            background: #ffeaea;
+            color: #dc3545;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+
+            .terminal-toolbar {
+                flex-direction: column;
+                gap: 8px;
+                align-items: stretch;
+            }
+
+            .form-row {
+                flex-direction: column;
+            }
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #0366d6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 隐藏元素 */
+        .hidden {
+            display: none !important;
+        }
+
+        /* 提示信息 */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            border: 1px solid;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+            color: #856404;
+        }
+
+        .alert-info {
+            background: #cce7ff;
+            border-color: #b8daff;
+            color: #004085;
+        }
+    </style>
+</head>
+<body>
+    <div class="cli-container">
+        <!-- 页面头部 -->
+        <div class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <h1>
+                        🖥️ CLI终端管理
+                    </h1>
+                    <div class="description">
+                        通过WebSocket连接到网络设备，提供类似CRT的CLI终端体验
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" onclick="createNewTerminal()">
+                        ➕ 新建终端
+                    </button>
+                    <button class="btn" onclick="showSessionManager()">
+                        📊 会话管理
+                    </button>
+                    <button class="btn" onclick="showShortcuts()">
+                        ❓ 快捷键
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 终端标签页 -->
+        <div class="terminal-tabs" id="terminal-tabs">
+            <!-- 标签页将通过JavaScript动态生成 -->
+        </div>
+
+        <!-- 连接配置面板 -->
+        <div class="config-panel" id="config-panel">
+            <div class="config-tabs">
+                <button class="config-tab active" onclick="switchConfigTab('device')">选择设备</button>
+                <button class="config-tab" onclick="switchConfigTab('manual')">手动配置</button>
+            </div>
+
+            <!-- 设备选择配置 -->
+            <div class="config-content active" id="device-config">
+                <div class="form-group">
+                    <label class="form-label">选择设备</label>
+                    <select class="form-control" id="device-select">
+                        <option value="">请选择设备...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="dynamic-password-group" style="display: none;">
+                    <label class="form-label">动态密码</label>
+                    <input type="password" class="form-control" id="dynamic-password" placeholder="请输入设备密码">
+                </div>
+                <div id="device-info" style="display: none;">
+                    <h4>设备信息</h4>
+                    <div id="device-details"></div>
+                </div>
+            </div>
+
+            <!-- 手动配置 -->
+            <div class="config-content" id="manual-config">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">IP地址 *</label>
+                        <input type="text" class="form-control" id="manual-ip" placeholder="192.168.1.1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">SSH端口</label>
+                        <input type="number" class="form-control" id="manual-port" value="22" min="1" max="65535">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">用户名 *</label>
+                        <input type="text" class="form-control" id="manual-username" placeholder="admin">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">密码 *</label>
+                        <input type="password" class="form-control" id="manual-password" placeholder="请输入密码">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">设备平台</label>
+                    <select class="form-control" id="manual-platform">
+                        <option value="generic">通用设备</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; text-align: right;">
+                <button class="btn" onclick="hideConfigPanel()">取消</button>
+                <button class="btn btn-primary" onclick="connectDevice()" id="connect-btn">
+                    🔗 连接设备
+                </button>
+            </div>
+        </div>
+
+        <!-- 终端工具栏 -->
+        <div class="terminal-toolbar" id="terminal-toolbar" style="display: none;">
+            <div class="toolbar-left">
+                <div class="connection-status">
+                    <div class="status-indicator" id="status-indicator"></div>
+                    <span id="status-text">未连接</span>
+                </div>
+                <div class="session-info">
+                    会话: <span id="session-id">-</span>
+                </div>
+            </div>
+            <div class="toolbar-right">
+                <button class="toolbar-btn" onclick="reconnectSession()">🔄 重连</button>
+                <button class="toolbar-btn" onclick="clearTerminal()">🗑️ 清屏</button>
+                <button class="toolbar-btn" onclick="disconnectSession()">❌ 断开</button>
+            </div>
+        </div>
+
+        <!-- 终端容器 -->
+        <div class="terminal-container">
+            <div class="terminal-wrapper" id="terminal-wrapper">
+                <!-- Xterm.js终端将在这里渲染 -->
+            </div>
+
+            <!-- 状态页面 -->
+            <div class="status-page" id="status-page">
+                <div class="status-icon">🖥️</div>
+                <div class="status-title">CLI终端未连接</div>
+                <div class="status-description">
+                    点击"新建终端"按钮开始连接到网络设备，体验专业的CLI终端操作
+                </div>
+                <button class="btn btn-primary" onclick="createNewTerminal()">
+                    🚀 创建第一个终端
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 会话管理模态框 -->
+    <div class="modal" id="session-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title">CLI会话管理</div>
+                <button class="modal-close" onclick="hideSessionManager()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- 统计信息 -->
+                <div id="session-stats" style="margin-bottom: 20px;">
+                    <div style="display: flex; gap: 20px; margin-bottom: 16px;">
+                        <div>总会话数: <strong id="total-sessions">0</strong></div>
+                        <div>已连接: <strong id="connected-sessions">0</strong></div>
+                        <div>执行命令: <strong id="total-commands">0</strong></div>
+                    </div>
+                </div>
+
+                <!-- 会话列表 -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <h4>活跃会话</h4>
+                        <button class="btn" onclick="refreshSessions()">🔄 刷新</button>
+                    </div>
+                    <table class="sessions-table">
+                        <thead>
+                            <tr>
+                                <th>会话ID</th>
+                                <th>状态</th>
+                                <th>设备信息</th>
+                                <th>命令数</th>
+                                <th>最后活动</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessions-tbody">
+                            <!-- 会话数据将通过JavaScript填充 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Xterm.js 和插件 -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-search@0.13.0/lib/xterm-addon-search.js"></script>
+
+    <script>
+        // 全局变量
+        let terminals = new Map(); // 存储所有终端实例
+        let activeTerminalId = null;
+        let terminalCounter = 0;
+        let deviceList = [];
+        let supportedPlatforms = [];
+        let currentConfigType = 'device';
+
+        // API配置
+        const API_BASE = '/api/v1';
+        const WS_PROTOCOL = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const WS_HOST = location.host;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadDeviceList();
+            await loadSupportedPlatforms();
+            bindKeyboardShortcuts();
+            
+            // 显示欢迎页面
+            showStatusPage();
+        });
+
+        // 加载设备列表
+        async function loadDeviceList() {
+            try {
+                const response = await fetch(`${API_BASE}/devices`);
+                const result = await response.json();
+                deviceList = result.data || [];
+                
+                const select = document.getElementById('device-select');select.innerHTML = '<option value="">请选择设备...</option>';
+                
+                deviceList.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.id;
+                    option.textContent = `${device.hostname} (${device.ip_address})`;
+                    option.dataset.device = JSON.stringify(device);
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('加载设备列表失败:', error);
+                showAlert('加载设备列表失败', 'danger');
+            }
+        }
+
+        // 加载支持平台
+        async function loadSupportedPlatforms() {
+            try {
+                const response = await fetch(`${API_BASE}/cli/platforms`);
+                const platforms = await response.json();
+                supportedPlatforms = platforms || [];
+                
+                const select = document.getElementById('manual-platform');
+                select.innerHTML = '<option value="generic">通用设备</option>';
+                
+                platforms.forEach(platform => {
+                    const option = document.createElement('option');
+                    option.value = platform.scrapli_platform;
+                    option.textContent = platform.description;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('加载支持平台失败:', error);
+            }
+        }
+
+        // 设备选择变化处理
+        document.getElementById('device-select').addEventListener('change', function() {
+            const deviceId = this.value;
+            const dynamicPasswordGroup = document.getElementById('dynamic-password-group');
+            const deviceInfo = document.getElementById('device-info');
+            const deviceDetails = document.getElementById('device-details');
+            
+            if (deviceId) {
+                const option = this.options[this.selectedIndex];
+                const device = JSON.parse(option.dataset.device);
+                
+                // 显示/隐藏动态密码输入
+                if (device.auth_type === 'dynamic') {
+                    dynamicPasswordGroup.style.display = 'block';
+                } else {
+                    dynamicPasswordGroup.style.display = 'none';
+                }
+                
+                // 显示设备信息
+                deviceDetails.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px;">
+                        <div><strong>设备类型:</strong> ${device.device_type}</div>
+                        <div><strong>网络层级:</strong> ${device.network_layer}</div>
+                        <div><strong>SSH端口:</strong> ${device.ssh_port}</div>
+                        <div><strong>认证类型:</strong> ${device.auth_type}</div>
+                    </div>
+                `;
+                deviceInfo.style.display = 'block';
+            } else {
+                dynamicPasswordGroup.style.display = 'none';
+                deviceInfo.style.display = 'none';
+            }
+        });
+
+        // 创建新终端
+        function createNewTerminal() {
+            terminalCounter++;
+            const terminalId = `terminal-${terminalCounter}`;
+            
+            const terminal = {
+                id: terminalId,
+                title: `终端 ${terminalCounter}`,
+                websocket: null,
+                xtermInstance: null,
+                fitAddon: null,
+                isConnected: false,
+                sessionId: null,
+                createdAt: new Date()
+            };
+            
+            terminals.set(terminalId, terminal);
+            activeTerminalId = terminalId;
+            
+            updateTerminalTabs();
+            showConfigPanel();
+        }
+
+        // 移除终端
+        function removeTerminal(terminalId) {
+            const terminal = terminals.get(terminalId);
+            if (terminal) {
+                // 关闭WebSocket连接
+                if (terminal.websocket) {
+                    terminal.websocket.close();
+                }
+                
+                // 销毁Xterm实例
+                if (terminal.xtermInstance) {
+                    terminal.xtermInstance.dispose();
+                }
+                
+                terminals.delete(terminalId);
+                
+                // 如果删除的是活跃终端，切换到其他终端
+                if (activeTerminalId === terminalId) {
+                    const remainingTerminals = Array.from(terminals.keys());
+                    if (remainingTerminals.length > 0) {
+                        activeTerminalId = remainingTerminals[0];
+                        switchToTerminal(activeTerminalId);
+                    } else {
+                        activeTerminalId = null;
+                        showStatusPage();
+                    }
+                }
+                
+                updateTerminalTabs();
+                showAlert(`终端 ${terminal.title} 已关闭`, 'info');
+            }
+        }
+
+        // 更新终端标签页
+        function updateTerminalTabs() {
+            const tabsContainer = document.getElementById('terminal-tabs');
+            tabsContainer.innerHTML = '';
+            
+            if (terminals.size === 0) {
+                tabsContainer.style.display = 'none';
+                return;
+            }
+            
+            tabsContainer.style.display = 'flex';
+            
+            terminals.forEach((terminal, terminalId) => {
+                const tab = document.createElement('div');
+                tab.className = `tab ${terminalId === activeTerminalId ? 'active' : ''}`;
+                tab.innerHTML = `
+                    <span>🖥️ ${terminal.title}</span>
+                    <div class="connection-dot ${terminal.isConnected ? '' : 'disconnected'}"></div>
+                    <span class="tab-close" onclick="event.stopPropagation(); removeTerminal('${terminalId}')">&times;</span>
+                `;
+                tab.onclick = () => switchToTerminal(terminalId);
+                tabsContainer.appendChild(tab);
+            });
+        }
+
+        // 切换到指定终端
+        function switchToTerminal(terminalId) {
+            activeTerminalId = terminalId;
+            const terminal = terminals.get(terminalId);
+            
+            if (terminal) {
+                updateTerminalTabs();
+                
+                if (terminal.isConnected) {
+                    showTerminal(terminal);
+                } else {
+                    showConfigPanel();
+                }
+            }
+        }
+
+        // 显示配置面板
+        function showConfigPanel() {
+            document.getElementById('config-panel').classList.add('show');
+            document.getElementById('terminal-toolbar').style.display = 'none';
+            document.getElementById('status-page').style.display = 'none';
+            document.getElementById('terminal-wrapper').style.display = 'none';
+        }
+
+        // 隐藏配置面板
+        function hideConfigPanel() {
+            document.getElementById('config-panel').classList.remove('show');
+            
+            if (activeTerminalId && terminals.get(activeTerminalId)?.isConnected) {
+                showTerminal(terminals.get(activeTerminalId));
+            } else {
+                showStatusPage();
+            }
+        }
+
+        // 显示状态页面
+        function showStatusPage() {
+            document.getElementById('config-panel').classList.remove('show');
+            document.getElementById('terminal-toolbar').style.display = 'none';
+            document.getElementById('terminal-wrapper').style.display = 'none';
+            document.getElementById('status-page').style.display = 'flex';
+        }
+
+        // 显示终端
+        function showTerminal(terminal) {
+            document.getElementById('config-panel').classList.remove('show');
+            document.getElementById('status-page').style.display = 'none';
+            document.getElementById('terminal-toolbar').style.display = 'flex';
+            document.getElementById('terminal-wrapper').style.display = 'block';
+            
+            // 更新工具栏状态
+            updateToolbarStatus(terminal);
+            
+            // 如果终端实例不存在，创建它
+            if (!terminal.xtermInstance) {
+                initializeXterm(terminal);
+            }
+            
+            // 调整终端大小
+            if (terminal.fitAddon) {
+                setTimeout(() => {
+                    terminal.fitAddon.fit();
+                }, 100);
+            }
+        }
+
+        // 初始化Xterm终端
+        function initializeXterm(terminal) {
+            const wrapper = document.getElementById('terminal-wrapper');
+            wrapper.innerHTML = '<div id="xterm-container"></div>';
+            
+            const xterm = new Terminal({
+                fontFamily: '"Cascadia Code", "JetBrains Mono", "SF Mono", Monaco, monospace',
+                fontSize: 14,
+                cursorBlink: true,
+                cursorStyle: 'block',
+                scrollback: 1000,
+                theme: {
+                    foreground: '#ffffff',
+                    background: '#1e1e1e',
+                    cursor: '#ffffff',
+                    black: '#000000',
+                    red: '#cd3131',
+                    green: '#0dbc79',
+                    yellow: '#e5e510',
+                    blue: '#2472c8',
+                    magenta: '#bc3fbc',
+                    cyan: '#11a8cd',
+                    white: '#e5e5e5',
+                    brightBlack: '#666666',
+                    brightRed: '#f14c4c',
+                    brightGreen: '#23d18b',
+                    brightYellow: '#f5f543',
+                    brightBlue: '#3b8eea',
+                    brightMagenta: '#d670d6',
+                    brightCyan: '#29b8db',
+                    brightWhite: '#ffffff'
+                }
+            });
+            
+            const fitAddon = new FitAddon.FitAddon();
+            const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+            const searchAddon = new SearchAddon.SearchAddon();
+            
+            xterm.loadAddon(fitAddon);
+            xterm.loadAddon(webLinksAddon);
+            xterm.loadAddon(searchAddon);
+            
+            xterm.open(document.getElementById('xterm-container'));
+            fitAddon.fit();
+            
+            // 绑定数据输入事件
+            xterm.onData(data => {
+                if (terminal.websocket && terminal.websocket.readyState === WebSocket.OPEN) {
+                    terminal.websocket.send(JSON.stringify({
+                        type: 'input',
+                        data: data
+                    }));
+                }
+            });
+            
+            terminal.xtermInstance = xterm;
+            terminal.fitAddon = fitAddon;
+            
+            // 显示欢迎信息
+            xterm.write('\r\n\x1b[1;36m欢迎使用网络设备CLI终端\x1b[0m\r\n');
+            xterm.write('\x1b[1;33m请配置并连接到设备\x1b[0m\r\n\r\n');
+        }
+
+        // 连接设备
+        async function connectDevice() {
+            const terminal = terminals.get(activeTerminalId);
+            if (!terminal) return;
+            
+            const connectBtn = document.getElementById('connect-btn');
+            const originalText = connectBtn.textContent;
+            connectBtn.innerHTML = '<div class="loading"></div> 连接中...';
+            connectBtn.disabled = true;
+            
+            try {
+                if (currentConfigType === 'device') {
+                    await connectToDevice(terminal);
+                } else {
+                    await connectToManualDevice(terminal);
+                }
+            } catch (error) {
+                console.error('连接失败:', error);
+                showAlert(`连接失败: ${error.message}`, 'danger');
+            } finally {
+                connectBtn.textContent = originalText;
+                connectBtn.disabled = false;
+            }
+        }
+
+        // 连接到数据库设备
+        async function connectToDevice(terminal) {
+            const deviceId = document.getElementById('device-select').value;
+            const dynamicPassword = document.getElementById('dynamic-password').value;
+            
+            if (!deviceId) {
+                throw new Error('请选择要连接的设备');
+            }
+            
+            const device = deviceList.find(d => d.id === deviceId);
+            if (device && device.auth_type === 'dynamic' && !dynamicPassword) {
+                throw new Error('请输入动态密码');
+            }
+            
+            // 构建WebSocket URL
+            let wsUrl = `${WS_PROTOCOL}//${WS_HOST}${API_BASE}/cli/terminal/device/${deviceId}`;
+            if (dynamicPassword) {
+                wsUrl += `?dynamic_password=${encodeURIComponent(dynamicPassword)}`;
+            }
+            
+            await establishWebSocketConnection(terminal, wsUrl);
+        }
+
+        // 连接到手动配置设备
+        async function connectToManualDevice(terminal) {
+            const ip = document.getElementById('manual-ip').value.trim();
+            const username = document.getElementById('manual-username').value.trim();
+            const password = document.getElementById('manual-password').value.trim();
+            const port = parseInt(document.getElementById('manual-port').value) || 22;
+            const platform = document.getElementById('manual-platform').value;
+            
+            if (!ip || !username || !password) {
+                throw new Error('请填写完整的设备连接信息');
+            }
+            
+            // 验证IP地址格式
+            const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+            if (!ipRegex.test(ip)) {
+                throw new Error('请输入有效的IP地址');
+            }
+            
+            const deviceConfig = { ip_address: ip, username, password, ssh_port: port, platform };
+            const wsUrl = `${WS_PROTOCOL}//${WS_HOST}${API_BASE}/cli/terminal/manual`;
+            
+            await establishWebSocketConnection(terminal, wsUrl, deviceConfig);
+        }
+
+        // 建立WebSocket连接
+        function establishWebSocketConnection(terminal, wsUrl, deviceConfig = null) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const ws = new WebSocket(wsUrl);
+                    terminal.websocket = ws;
+                    
+                    ws.onopen = () => {
+                        console.log('WebSocket连接已建立');
+                        
+                        // 如果是手动配置，发送设备配置
+                        if (deviceConfig) {
+                            ws.send(JSON.stringify({
+                                type: 'device_config',
+                                config: deviceConfig
+                            }));
+                        }
+                    };
+                    
+                    ws.onmessage = (event) => {
+                        try {
+                            const message = JSON.parse(event.data);
+                            handleWebSocketMessage(terminal, message);
+                            
+                            if (message.type === 'connection_status' && message.status === 'connected') {
+                                terminal.isConnected = true;
+                                terminal.sessionId = message.session_id;
+                                showTerminal(terminal);
+                                updateTerminalTabs();
+                                resolve();
+                            }
+                        } catch (error) {
+                            console.error('解析WebSocket消息失败:', error);
+                            if (terminal.xtermInstance) {
+                                terminal.xtermInstance.write(`\r\n\x1b[31m消息解析错误: ${error.message}\x1b[0m\r\n`);
+                            }
+                        }
+                    };
+                    
+                    ws.onerror = (error) => {
+                        console.error('WebSocket错误:', error);
+                        if (terminal.xtermInstance) {
+                            terminal.xtermInstance.write(`\r\n\x1b[31mWebSocket连接错误\x1b[0m\r\n`);
+                        }
+                        reject(new Error('WebSocket连接错误'));
+                    };
+                    
+                    ws.onclose = (event) => {
+                        console.log('WebSocket连接已关闭:', event.code, event.reason);
+                        terminal.isConnected = false;
+                        terminal.sessionId = null;
+                        updateTerminalTabs();
+                        updateToolbarStatus(terminal);
+                        
+                        if (terminal.xtermInstance) {
+                            terminal.xtermInstance.write(`\r\n\x1b[33m连接已断开 (代码: ${event.code})\x1b[0m\r\n`);
+                        }
+                        
+                        if (!event.wasClean && event.code !== 1000) {
+                            showAlert('连接意外断开', 'warning');
+                        }
+                    };
+                    
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+
+        // 处理WebSocket消息
+        function handleWebSocketMessage(terminal, message) {
+            switch (message.type) {
+                case 'output':
+                    if (terminal.xtermInstance) {
+                        terminal.xtermInstance.write(message.data);
+                    }
+                    break;
+                    
+                case 'connection_status':
+                    if (message.status === 'connected') {
+                        showAlert(message.message || '设备连接成功', 'success');
+                    } else if (message.status === 'disconnected') {
+                        showAlert(message.message || '设备连接断开', 'warning');
+                    }
+                    break;
+                    
+                case 'error':
+                    if (terminal.xtermInstance) {
+                        terminal.xtermInstance.write(`\r\n\x1b[31m错误: ${message.message}\x1b[0m\r\n`);
+                    }
+                    showAlert(message.message, 'danger');
+                    break;
+                    
+                case 'pong':
+                    // 心跳响应
+                    break;
+                    
+                default:
+                    console.log('未知消息类型:', message.type);
+            }
+        }
+
+        // 更新工具栏状态
+        function updateToolbarStatus(terminal) {
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+            const sessionId = document.getElementById('session-id');
+            
+            if (terminal.isConnected) {
+                statusIndicator.className = 'status-indicator';
+                statusText.textContent = '已连接';
+                sessionId.textContent = terminal.sessionId ? terminal.sessionId.substring(0, 8) + '...' : '-';
+            } else {
+                statusIndicator.className = 'status-indicator disconnected';
+                statusText.textContent = '未连接';
+                sessionId.textContent = '-';
+            }
+        }
+
+        // 重连会话
+        function reconnectSession() {
+            const terminal = terminals.get(activeTerminalId);
+            if (!terminal || !terminal.websocket) return;
+            
+            if (terminal.websocket.readyState === WebSocket.OPEN) {
+                terminal.websocket.send(JSON.stringify({
+                    type: 'reconnect'
+                }));
+                showAlert('重连请求已发送', 'info');
+            }
+        }
+
+        // 清屏
+        function clearTerminal() {
+            const terminal = terminals.get(activeTerminalId);
+            if (terminal && terminal.xtermInstance) {
+                terminal.xtermInstance.clear();
+            }
+        }
+
+        // 断开连接
+        function disconnectSession() {
+            const terminal = terminals.get(activeTerminalId);
+            if (terminal && terminal.websocket) {
+                terminal.websocket.close();
+                showAlert('已断开连接', 'info');
+            }
+        }
+
+        // 配置标签页切换
+        function switchConfigTab(type) {
+            currentConfigType = type;
+            
+            // 更新标签页样式
+            document.querySelectorAll('.config-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // 显示对应内容
+            document.querySelectorAll('.config-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${type}-config`).classList.add('active');
+        }
+
+        // 显示会话管理器
+        async function showSessionManager() {
+            document.getElementById('session-modal').classList.add('show');
+            await refreshSessions();
+        }
+
+        // 隐藏会话管理器
+        function hideSessionManager() {
+            document.getElementById('session-modal').classList.remove('show');
+        }
+
+        // 刷新会话列表
+        async function refreshSessions() {
+            try {
+                // 获取会话统计
+                const statsResponse = await fetch(`${API_BASE}/cli/sessions/stats`);
+                const stats = await statsResponse.json();
+                
+                document.getElementById('total-sessions').textContent = stats.total_sessions || 0;
+                document.getElementById('connected-sessions').textContent = stats.connected_sessions || 0;
+                document.getElementById('total-commands').textContent = stats.total_commands_executed || 0;
+                
+                // 获取会话列表
+                const sessionsResponse = await fetch(`${API_BASE}/cli/sessions`);
+                const sessions = await sessionsResponse.json();
+                
+                const tbody = document.getElementById('sessions-tbody');
+                tbody.innerHTML = '';
+                
+                if (sessions.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #586069;">暂无活跃会话</td></tr>';
+                    return;
+                }
+                
+                sessions.forEach(session => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${session.session_id.substring(0, 8)}...</td>
+                        <td>
+                            <span class="session-status ${session.is_connected ? 'connected' : 'disconnected'}">
+                                ${session.is_connected ? '已连接' : '未连接'}
+                            </span>
+                        </td>
+                        <td>${session.device_info.hostname || session.device_info.ip_address}</td>
+                        <td>${session.command_count}</td>
+                        <td>${formatTime(session.last_activity)}</td>
+                        <td>
+                            <button class="btn" style="padding: 4px 8px; font-size: 12px;" 
+                                    onclick="closeSession('${session.session_id}')">
+                                关闭
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+            } catch (error) {
+                console.error('刷新会话失败:', error);
+                showAlert('刷新会话失败', 'danger');
+            }
+        }
+
+        // 关闭会话
+        async function closeSession(sessionId) {
+            if (!confirm('确定要关闭此会话吗？')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/cli/sessions/${sessionId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    showAlert('会话已关闭', 'success');
+                    await refreshSessions();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || '关闭会话失败');
+                }
+            } catch (error) {
+                console.error('关闭会话失败:', error);
+                showAlert(error.message, 'danger');
+            }
+        }
+
+        // 显示快捷键帮助
+        function showShortcuts() {
+            const shortcuts = `
+                快捷键帮助：
+                
+                Ctrl + T - 新建终端
+                Ctrl + W - 关闭当前终端
+                Ctrl + 1-9 - 切换到指定终端
+                
+                终端内快捷键：
+                Ctrl + L - 清屏
+                Ctrl + C - 中断命令
+                Tab - 命令补全
+                ↑/↓ - 命令历史
+            `;
+            alert(shortcuts);
+        }
+
+        // 绑定键盘快捷键
+        function bindKeyboardShortcuts() {
+            document.addEventListener('keydown', function(event) {
+                // Ctrl + T - 新建终端
+                if (event.ctrlKey && event.key === 't') {
+                    event.preventDefault();
+                    createNewTerminal();
+                    return;
+                }
+                
+                // Ctrl + W - 关闭当前终端
+                if (event.ctrlKey && event.key === 'w') {
+                    event.preventDefault();
+                    if (activeTerminalId) {
+                        removeTerminal(activeTerminalId);
+                    }
+                    return;
+                }
+                
+                // Ctrl + 1-9 - 切换到指定终端
+                if (event.ctrlKey && /^[1-9]$/.test(event.key)) {
+                    event.preventDefault();
+                    const terminalIds = Array.from(terminals.keys());
+                    const index = parseInt(event.key) - 1;
+                    if (index < terminalIds.length) {
+                        switchToTerminal(terminalIds[index]);
+                    }
+                    return;
+                }
+            });
+        }
+
+        // 显示提示信息
+        function showAlert(message, type = 'info') {
+            // 创建提示元素
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            alert.style.position = 'fixed';
+            alert.style.top = '20px';
+            alert.style.right = '20px';
+            alert.style.zIndex = '9999';
+            alert.style.minWidth = '300px';
+            alert.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+            
+            document.body.appendChild(alert);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 3000);
+        }
+
+        // 格式化时间
+        function formatTime(timeString) {
+            if (!timeString) return 'N/A';
+            
+            const time = new Date(timeString);
+            const now = new Date();
+            const diffMs = now - time;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMins / 60);
+            
+            if (diffMins < 1) return '刚刚';
+            if (diffMins < 60) return `${diffMins}分钟前`;
+            if (diffHours < 24) return `${diffHours}小时前`;
+            
+            return time.toLocaleDateString();
+        }
+
+        // 窗口大小变化处理
+        window.addEventListener('resize', function() {
+            const terminal = terminals.get(activeTerminalId);
+            if (terminal && terminal.fitAddon) {
+                setTimeout(() => {
+                    terminal.fitAddon.fit();
+                }, 100);
+            }
+        });
+
+        // 点击模态框外部关闭
+        document.getElementById('session-modal').addEventListener('click', function(event) {
+            if (event.target === this) {
+                hideSessionManager();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -16,6 +16,8 @@ from app.core.exceptions import UnauthorizedException
 from app.core.security import SecurityManager, security_manager
 from app.models.user import User
 from app.schemas.auth import TokenPayload
+
+# 移除直接导入，改为延迟导入
 from app.utils import logger
 
 reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_PREFIX}/v1/auth/login/form")
@@ -110,6 +112,12 @@ def get_device_connection_service():
     from app.services.device_connection import DeviceConnectionService
 
     return DeviceConnectionService()
+
+
+def get_cli_service():
+    from app.services.cli_session import CLISessionService
+
+    return CLISessionService()
 
 
 def get_security_manager() -> SecurityManager:

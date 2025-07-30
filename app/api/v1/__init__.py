@@ -13,6 +13,7 @@ from app.api.v1 import (
     admin_routes,
     auth,
     authentication,
+    cli_terminal,
     device_configs,
     device_connection,
     devices,
@@ -30,6 +31,7 @@ from app.api.v1 import (
     users,
     vendor_commands,
     vendors,
+    web_routes,
 )
 
 # 创建 API v1 路由器
@@ -57,6 +59,8 @@ api_router.include_router(universal_query.router, tags=["通用查询"])
 api_router.include_router(query_history.router, tags=["查询历史管理"])
 api_router.include_router(network_query.router, tags=["网络查询"])
 api_router.include_router(import_export.router, tags=["导入导出"])
+api_router.include_router(cli_terminal.router, tags=["CLI终端"])
+api_router.include_router(web_routes.router, tags=["Web页面"])
 
 # 保持向后兼容
 v1_router = api_router
