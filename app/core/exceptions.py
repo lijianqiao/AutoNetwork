@@ -50,6 +50,21 @@ class NotFoundException(APIException):
         )
 
 
+class RateLimitException(APIException):
+    """速率限制异常"""
+
+    def __init__(
+        self,
+        message: str = "请求过于频繁，请稍后再试",
+        detail: str | dict[str, Any] | None = None,
+    ):
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            message=message,
+            detail=detail,
+        )
+
+
 class BadRequestException(APIException):
     """错误请求异常"""
 

@@ -12,7 +12,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Callable
 
-from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
@@ -21,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
+from app.core.exceptions import RateLimitException
 from app.utils.logger import logger
 
 
@@ -60,8 +61,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
 
         if not rate_limiter.is_allowed(client_ip, settings.RATE_LIMIT_PER_MINUTE):
-            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="请求过于频繁，请稍后再试")
+            logger.warning(f"IP 地址的速率限制已超过： {client_ip}")
+            raise RateLimitException(detail="请求过于频繁，请稍后再试")
 
         return await call_next(request)
 
