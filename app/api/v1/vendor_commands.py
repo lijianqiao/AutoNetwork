@@ -14,7 +14,7 @@ from app.core.permissions.simple_decorators import (
     Permissions,
     require_permission,
 )
-from app.schemas.base import SuccessResponse
+from app.schemas.base import BaseResponse, SuccessResponse
 from app.schemas.vendor_command import (
     VendorCommandBatchCreateRequest,
     VendorCommandCreateRequest,
@@ -36,7 +36,8 @@ async def list_vendor_commands(
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_READ)),
 ):
     """获取厂商命令列表，支持筛选"""
-    return await service.get_vendor_command_list(query, operation_context)
+    result = await service.get_vendor_command_list(query, operation_context)
+    return result
 
 
 @router.get("/{command_id}", response_model=VendorCommandResponse, summary="获取厂商命令详情")
@@ -46,7 +47,8 @@ async def get_vendor_command(
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_READ)),
 ):
     """获取厂商命令详情"""
-    return await service.get_vendor_command_by_id(command_id, operation_context)
+    result = await service.get_vendor_command_by_id(command_id, operation_context)
+    return result
 
 
 @router.post("", response_model=VendorCommandResponse, status_code=status.HTTP_201_CREATED, summary="创建厂商命令")
@@ -56,7 +58,8 @@ async def create_vendor_command(
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_CREATE)),
 ):
     """创建新厂商命令"""
-    return await service.create_vendor_command(command_data, operation_context)
+    result = await service.create_vendor_command(command_data, operation_context)
+    return result
 
 
 @router.put("/{command_id}", response_model=VendorCommandResponse, summary="更新厂商命令")
@@ -67,7 +70,8 @@ async def update_vendor_command(
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_UPDATE)),
 ):
     """更新厂商命令信息"""
-    return await service.update_vendor_command(command_id, command_data, operation_context)
+    result = await service.update_vendor_command(command_id, command_data, operation_context)
+    return result
 
 
 @router.delete("/{command_id}", response_model=SuccessResponse, summary="删除厂商命令")
@@ -77,8 +81,8 @@ async def delete_vendor_command(
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_DELETE)),
 ):
     """删除厂商命令"""
-    await service.delete_vendor_command(command_id, operation_context)
-    return SuccessResponse(message="厂商命令删除成功")
+    result = await service.delete_vendor_command(command_id, operation_context)
+    return BaseResponse(data=result, message="厂商命令删除成功")
 
 
 # ===== 批量操作功能 =====
@@ -91,7 +95,8 @@ async def batch_create_vendor_commands(
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_CREATE)),
 ):
     """批量创建厂商命令"""
-    return await service.batch_create_commands(batch_data, operation_context)
+    result = await service.batch_create_commands(batch_data, operation_context)
+    return result
 
 
 @router.put("/batch/status", response_model=SuccessResponse, summary="批量更新命令状态")
@@ -103,7 +108,7 @@ async def batch_update_command_status(
 ):
     """批量更新厂商命令状态"""
     updated_count = await service.batch_update_status(command_ids, is_active, operation_context)
-    return SuccessResponse(message=f"成功更新 {updated_count} 个厂商命令状态")
+    return BaseResponse(data={"updated_count": updated_count}, message=f"成功更新 {updated_count} 个厂商命令状态")
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除厂商命令")
@@ -114,16 +119,17 @@ async def batch_delete_vendor_commands(
 ):
     """批量删除厂商命令"""
     deleted_count = await service.batch_delete_commands(command_ids, operation_context)
-    return SuccessResponse(message=f"成功删除 {deleted_count} 个厂商命令")
+    return BaseResponse(data={"deleted_count": deleted_count}, message=f"成功删除 {deleted_count} 个厂商命令")
 
 
 # ===== 统计功能 =====
 
 
-@router.get("/statistics/overview", response_model=dict, summary="获取厂商命令统计信息")
+@router.get("/statistics/overview", response_model=BaseResponse[dict], summary="获取厂商命令统计信息")
 async def get_command_statistics(
     service: VendorCommandService = Depends(get_vendor_command_service),
     operation_context: OperationContext = Depends(require_permission(Permissions.VENDOR_COMMAND_READ)),
 ):
     """获取厂商命令统计信息"""
-    return await service.get_command_statistics(operation_context)
+    stats = await service.get_command_statistics(operation_context)
+    return BaseResponse(data=stats)

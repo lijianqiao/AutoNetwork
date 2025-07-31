@@ -16,15 +16,19 @@ from app.dao.vendor import VendorDAO
 from app.models.device import Device
 from app.schemas.device import (
     DeviceAuthTypeUpdateRequest,
+    DeviceBatchCreateResponse,
+    DeviceBatchDeleteResponse,
     DeviceBatchOperationRequest,
-    DeviceConnectionResult,
-    DeviceConnectionTestRequest,
-    DeviceConnectionTestResponse,
+    DeviceBatchUpdateResponse,
     DeviceCreateRequest,
+    DeviceCreateResponse,
+    DeviceDeleteResponse,
     DeviceDetailResponse,
+    DeviceDetailResponseWrapper,
     DeviceListRequest,
     DeviceResponse,
     DeviceUpdateRequest,
+    DeviceUpdateResponse,
 )
 from app.services.base import BaseService
 from app.utils.deps import OperationContext
@@ -102,7 +106,9 @@ class DeviceService(BaseService[Device]):
         return data
 
     @log_create_with_context("device")
-    async def create_device(self, request: DeviceCreateRequest, operation_context: OperationContext) -> DeviceResponse:
+    async def create_device(
+        self, request: DeviceCreateRequest, operation_context: OperationContext
+    ) -> DeviceCreateResponse:
         """创建设备"""
         create_data = request.model_dump(exclude_unset=True)
         create_data["creator_id"] = operation_context.user.id
@@ -113,12 +119,12 @@ class DeviceService(BaseService[Device]):
 
         # 获取关联信息
         device_with_relations = await self.dao.get_with_related(device.id, select_related=["vendor", "region"])
-        return DeviceResponse.model_validate(device_with_relations)
+        return DeviceCreateResponse(message="设备创建成功", data=DeviceResponse.model_validate(device_with_relations))
 
     @log_update_with_context("device")
     async def update_device(
         self, device_id: UUID, request: DeviceUpdateRequest, operation_context: OperationContext
-    ) -> DeviceResponse:
+    ) -> DeviceUpdateResponse:
         """更新设备"""
         update_data = request.model_dump(exclude_unset=True)
 
@@ -136,10 +142,10 @@ class DeviceService(BaseService[Device]):
 
         # 获取关联信息
         device_with_relations = await self.dao.get_with_related(device_id, select_related=["vendor", "region"])
-        return DeviceResponse.model_validate(device_with_relations)
+        return DeviceUpdateResponse(message="设备更新成功", data=DeviceResponse.model_validate(device_with_relations))
 
     @log_delete_with_context("device")
-    async def delete_device(self, device_id: UUID, operation_context: OperationContext) -> None:
+    async def delete_device(self, device_id: UUID, operation_context: OperationContext) -> DeviceDeleteResponse:
         """删除设备"""
         device = await self.dao.get_by_id(device_id)
         if not device:
@@ -147,6 +153,7 @@ class DeviceService(BaseService[Device]):
             raise BusinessException("设备未找到")
 
         await self.delete(device_id, operation_context=operation_context)
+        return DeviceDeleteResponse(message="设备删除成功", data={"deleted_id": str(device_id)})
 
     @log_query_with_context("device")
     async def get_devices(
@@ -188,13 +195,15 @@ class DeviceService(BaseService[Device]):
         return [DeviceResponse.model_validate(device) for device in devices], total
 
     @log_query_with_context("device")
-    async def get_device_detail(self, device_id: UUID, operation_context: OperationContext) -> DeviceDetailResponse:
+    async def get_device_detail(
+        self, device_id: UUID, operation_context: OperationContext
+    ) -> DeviceDetailResponseWrapper:
         """获取设备详情"""
         device = await self.dao.get_with_related(device_id, select_related=["vendor", "region"])
         if not device:
             logger.error("设备未找到")
             raise BusinessException("设备未找到")
-        return DeviceDetailResponse.model_validate(device)
+        return DeviceDetailResponseWrapper(message="获取设备详情成功", data=DeviceDetailResponse.model_validate(device))
 
     @log_query_with_context("device")
     async def get_device_by_hostname(self, hostname: str, operation_context: OperationContext) -> DeviceResponse:
@@ -297,50 +306,12 @@ class DeviceService(BaseService[Device]):
             "failed_count": len(device_ids) - success_count,
         }
 
-    @log_query_with_context("device")
-    async def test_connection(
-        self, request: DeviceConnectionTestRequest, operation_context: OperationContext
-    ) -> DeviceConnectionTestResponse:
-        """测试设备连接"""
-        device_ids = request.device_ids
-        devices = await self.dao.get_by_ids(device_ids)
-
-        if not devices:
-            logger.error("没有找到指定的设备")
-            raise BusinessException("没有找到指定的设备")
-
-        results = []
-        success_count = 0
-
-        for device in devices:
-            # 这里应该调用实际的网络连接测试逻辑
-            # 暂时返回模拟结果
-            result = DeviceConnectionResult(
-                device_id=device.id,
-                hostname=device.hostname,
-                ip_address=device.ip_address,
-                success=True,  # 实际应该进行连接测试
-                connection_time=0.5,
-            )
-
-            if result.success:
-                success_count += 1
-
-            results.append(result)
-
-        return DeviceConnectionTestResponse(
-            total_count=len(devices),
-            success_count=success_count,
-            failed_count=len(devices) - success_count,
-            results=results,
-        )
-
     # ===== 标准批量操作方法 =====
 
     @log_create_with_context("device")
     async def batch_create_devices(
         self, devices_data: list[DeviceCreateRequest], operation_context: OperationContext
-    ) -> list[DeviceResponse]:
+    ) -> DeviceBatchCreateResponse:
         """批量创建设备"""
         # 转换为字典列表
         data_list = [device_data.model_dump() for device_data in devices_data]
@@ -367,12 +338,18 @@ class DeviceService(BaseService[Device]):
 
         # 使用BaseService的批量创建方法
         created_devices = await self.bulk_create(data_list)
-        return [DeviceResponse.model_validate(device) for device in created_devices]
+        # 获取关联信息并转换为DeviceResponse
+        devices_with_relations = []
+        for device in created_devices:
+            device_with_relations = await self.dao.get_with_related(device.id, select_related=["vendor", "region"])
+            devices_with_relations.append(device_with_relations)
+        devices_response_data = [DeviceResponse.model_validate(device) for device in devices_with_relations]
+        return DeviceBatchCreateResponse(message="批量创建设备成功", data=devices_response_data)
 
     @log_update_with_context("device")
     async def batch_update_devices(
         self, updates_data: list[dict], operation_context: OperationContext
-    ) -> list[DeviceResponse]:
+    ) -> DeviceBatchUpdateResponse:
         """批量更新设备"""
         # 提取所有要更新的ID
         update_ids = [update_item["id"] for update_item in updates_data]
@@ -397,10 +374,13 @@ class DeviceService(BaseService[Device]):
 
         # 返回更新后的数据
         updated_devices = await self.get_by_ids(update_ids)
-        return [DeviceResponse.model_validate(device) for device in updated_devices]
+        devices_data = [DeviceResponse.model_validate(device) for device in updated_devices]
+        return DeviceBatchUpdateResponse(message="批量更新设备成功", data=devices_data)
 
     @log_delete_with_context("device")
-    async def batch_delete_devices(self, device_ids: list[UUID], operation_context: OperationContext) -> int:
+    async def batch_delete_devices(
+        self, device_ids: list[UUID], operation_context: OperationContext
+    ) -> DeviceBatchDeleteResponse:
         """批量删除设备"""
         # 检查设备是否存在
         existing_devices = await self.get_by_ids(device_ids)
@@ -409,4 +389,8 @@ class DeviceService(BaseService[Device]):
             raise BusinessException(f"以下设备不存在: {', '.join(missing_ids)}")
 
         # 使用BaseService的批量删除方法
-        return await self.delete_by_ids(device_ids, operation_context)
+        deleted_count = await self.delete_by_ids(device_ids, operation_context)
+        return DeviceBatchDeleteResponse(
+            message="批量删除设备成功",
+            data={"deleted_count": deleted_count, "deleted_ids": [str(id) for id in device_ids]},
+        )

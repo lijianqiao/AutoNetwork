@@ -16,14 +16,24 @@ from app.dao.role import RoleDAO
 from app.dao.user import UserDAO
 from app.models.permission import Permission
 from app.models.user import User
+from app.schemas.base import BaseResponse
 from app.schemas.permission import PermissionResponse
+from app.schemas.role import RoleResponse
 from app.schemas.user import (
     UserAssignPermissionsRequest,
+    UserAssignPermissionsResponse,
+    UserAssignRolesResponse,
     UserCreateRequest,
+    UserCreateResponse,
+    UserDeleteResponse,
     UserDetailResponse,
+    UserDetailResponseWrapper,
     UserListRequest,
+    UserListResponseWrapper,
     UserResponse,
+    UserStatusUpdateResponse,
     UserUpdateRequest,
+    UserUpdateResponse,
 )
 from app.services.base import BaseService
 from app.utils.deps import OperationContext
@@ -62,7 +72,7 @@ class UserService(BaseService[User]):
         return data
 
     @log_create_with_context("user")
-    async def create_user(self, request: UserCreateRequest, operation_context: OperationContext) -> UserResponse:
+    async def create_user(self, request: UserCreateRequest, operation_context: OperationContext) -> UserCreateResponse:
         """创建用户，并可选择性地关联角色"""
         current_user = operation_context.user
         create_data = request.model_dump(exclude={"role_ids", "password"}, exclude_unset=True)
@@ -78,12 +88,12 @@ class UserService(BaseService[User]):
             roles = await self.role_dao.get_by_ids(request.role_ids)
             await user.roles.add(*roles)
 
-        return UserResponse.model_validate(user)
+        return UserCreateResponse(message="用户创建成功", data=UserResponse.model_validate(user))
 
     @log_update_with_context("user")
     async def update_user(
         self, user_id: UUID, request: UserUpdateRequest, operation_context: OperationContext
-    ) -> UserResponse:
+    ) -> UserUpdateResponse:
         """更新用户信息"""
         update_data = request.model_dump(exclude_unset=True)
 
@@ -95,15 +105,16 @@ class UserService(BaseService[User]):
         if not updated_user:
             raise BusinessException("用户更新失败或版本冲突")
 
-        return UserResponse.model_validate(updated_user)
+        return UserUpdateResponse(message="用户更新成功", data=UserResponse.model_validate(updated_user))
 
     @log_delete_with_context("user")
-    async def delete_user(self, user_id: UUID, operation_context: OperationContext) -> None:
+    async def delete_user(self, user_id: UUID, operation_context: OperationContext) -> UserDeleteResponse:
         """删除用户"""
         await self.delete(user_id, operation_context=operation_context)
+        return UserDeleteResponse(message="用户删除成功", data={"deleted_id": str(user_id)})
 
     @log_query_with_context("user")
-    async def get_user_detail(self, user_id: UUID, operation_context: OperationContext) -> UserDetailResponse:
+    async def get_user_detail(self, user_id: UUID, operation_context: OperationContext) -> UserDetailResponseWrapper:
         """获取用户详情，包含角色和所有权限"""
         # 确保不返回软删除的用户
         user = await self.dao.get_with_related(
@@ -115,7 +126,7 @@ class UserService(BaseService[User]):
         all_permissions = await self._get_user_permissions(user)
         user_detail = UserDetailResponse.model_validate(user)
         user_detail.permissions = [PermissionResponse.model_validate(p) for p in all_permissions]
-        return user_detail
+        return UserDetailResponseWrapper(message="获取用户详情成功", data=user_detail)
 
     @log_query_with_context("user")
     async def get_users(
@@ -165,7 +176,9 @@ class UserService(BaseService[User]):
             return None
         return user
 
-    async def update_user_status(self, user_id: UUID, is_active: bool, operation_context: OperationContext) -> None:
+    async def update_user_status(
+        self, user_id: UUID, is_active: bool, operation_context: OperationContext
+    ) -> UserStatusUpdateResponse:
         """更新用户状态"""
         current_user = operation_context.user
         if current_user.id == user_id:
@@ -182,10 +195,19 @@ class UserService(BaseService[User]):
             is_active=is_active,
         )
 
+        # 重新获取更新后的用户信息
+        updated_user = await self.get_by_id(user_id)
+        if not updated_user:
+            raise ValueError("用户不存在")
+
+        return UserStatusUpdateResponse(
+            message="用户状态更新成功", data=UserResponse.model_validate(updated_user)
+        )
+
     @invalidate_user_permission_cache("user_id")
     async def assign_roles(
         self, user_id: UUID, role_ids: list[UUID], operation_context: OperationContext
-    ) -> UserDetailResponse:
+    ) -> UserAssignRolesResponse:
         """为用户分配角色（全量设置）"""
         # 在服务层确保预加载关系，这是最可靠的位置
         user = await self.dao.get_with_related(user_id, prefetch_related=["roles"])
@@ -194,86 +216,93 @@ class UserService(BaseService[User]):
 
         # 现在 user.roles 已经被加载，可以安全地将 user 对象传递给 DAO 层
         await self.dao.set_user_roles(user, role_ids)
-        return await self.get_user_detail(user_id, operation_context)
+        user_detail_response = await self.get_user_detail(user_id, operation_context)
+        return UserAssignRolesResponse(message="用户角色分配成功", data=user_detail_response.data)
 
     @invalidate_user_permission_cache("user_id")
     async def add_user_roles(
         self, user_id: UUID, role_ids: list[UUID], operation_context: OperationContext
-    ) -> UserDetailResponse:
+    ) -> UserAssignRolesResponse:
         """为用户增量添加角色"""
         user = await self.dao.get_by_id(user_id)
         if not user:
             raise BusinessException("用户未找到")
 
         await self.dao.add_user_roles(user_id, role_ids)
-        return await self.get_user_detail(user_id, operation_context)
+        user_detail_response = await self.get_user_detail(user_id, operation_context)
+        return UserAssignRolesResponse(message="用户角色添加成功", data=user_detail_response.data)
 
     @invalidate_user_permission_cache("user_id")
     async def remove_user_roles(
         self, user_id: UUID, role_ids: list[UUID], operation_context: OperationContext
-    ) -> UserDetailResponse:
+    ) -> UserAssignRolesResponse:
         """移除用户的指定角色"""
         user = await self.dao.get_by_id(user_id)
         if not user:
             raise BusinessException("用户未找到")
 
         await self.dao.remove_user_roles(user_id, role_ids)
-        return await self.get_user_detail(user_id, operation_context)
+        user_detail_response = await self.get_user_detail(user_id, operation_context)
+        return UserAssignRolesResponse(message="用户角色移除成功", data=user_detail_response.data)
 
-    async def get_user_roles(self, user_id: UUID, operation_context: OperationContext) -> list[dict]:
+    async def get_user_roles(self, user_id: UUID, operation_context: OperationContext) -> BaseResponse[list[RoleResponse]]:
         """获取用户的角色列表"""
         user = await self.dao.get_by_id(user_id)
         if not user:
             raise BusinessException("用户未找到")
 
         roles = await self.dao.get_user_roles(user_id)
-        return [{"id": role.id, "role_name": role.role_name, "role_code": role.role_code} for role in roles]
+        roles_data = [RoleResponse.model_validate(role) for role in roles]
+        return BaseResponse[list[RoleResponse]](message="获取用户角色列表成功", data=roles_data)
 
     @invalidate_user_permission_cache("user_id")
     async def assign_permissions_to_user(
         self, user_id: UUID, request: UserAssignPermissionsRequest, operation_context: OperationContext
-    ) -> UserDetailResponse:
+    ) -> UserAssignPermissionsResponse:
         """为用户分配直接权限（全量设置）"""
         await self.dao.set_user_permissions(user_id, request.permission_ids)
-        return await self.get_user_detail(user_id, operation_context)
+        user_detail_response = await self.get_user_detail(user_id, operation_context)
+        return UserAssignPermissionsResponse(message="用户权限分配成功", data=user_detail_response.data)
 
     async def add_user_permissions(
         self, user_id: UUID, permission_ids: list[UUID], operation_context: OperationContext
-    ) -> UserDetailResponse:
+    ) -> UserAssignPermissionsResponse:
         """为用户增量添加权限"""
         user = await self.dao.get_by_id(user_id)
         if not user:
             raise BusinessException("用户未找到")
 
         await self.dao.add_user_permissions(user_id, permission_ids)
-        return await self.get_user_detail(user_id, operation_context)
+        user_detail_response = await self.get_user_detail(user_id, operation_context)
+        return UserAssignPermissionsResponse(message="用户权限添加成功", data=user_detail_response.data)
 
     async def remove_user_permissions(
         self, user_id: UUID, permission_ids: list[UUID], operation_context: OperationContext
-    ) -> UserDetailResponse:
+    ) -> UserAssignPermissionsResponse:
         """移除用户的指定权限"""
         user = await self.dao.get_by_id(user_id)
         if not user:
             raise BusinessException("用户未找到")
 
         await self.dao.remove_user_permissions(user_id, permission_ids)
-        return await self.get_user_detail(user_id, operation_context)
+        user_detail_response = await self.get_user_detail(user_id, operation_context)
+        return UserAssignPermissionsResponse(message="用户权限移除成功", data=user_detail_response.data)
 
-    async def get_user_permissions(
-        self, user_id: UUID, operation_context: OperationContext
-    ) -> list[PermissionResponse]:
+    async def get_user_permissions(self, user_id: UUID, operation_context: OperationContext) -> BaseResponse[list[PermissionResponse]]:
         """获取用户的直接权限列表"""
         user = await self.dao.get_by_id(user_id)
         if not user:
             raise BusinessException("用户未找到")
 
         permissions = await self.dao.get_user_permissions(user_id)
-        return [PermissionResponse.model_validate(perm) for perm in permissions]
+        permissions_data = [PermissionResponse.model_validate(perm) for perm in permissions]
+        return BaseResponse[list[PermissionResponse]](message="获取用户权限列表成功", data=permissions_data)
 
-    async def get_users_by_role_id(self, role_id: UUID, operation_context: OperationContext) -> list[UserResponse]:
+    async def get_users_by_role_id(self, role_id: UUID, operation_context: OperationContext) -> UserListResponseWrapper:
         """根据角色ID获取用户列表"""
         users = await self.dao.find_by_fields(roles__id=role_id, include_deleted=False)
-        return [UserResponse.model_validate(user) for user in users]
+        users_data = [UserResponse.model_validate(user) for user in users]
+        return UserListResponseWrapper(message="获取角色用户列表成功", data=users_data)
 
     async def _get_user_permissions(self, user: User) -> set[Permission]:
         """获取用户的所有权限，包括直接权限和通过角色继承的权限。"""
@@ -301,7 +330,7 @@ class UserService(BaseService[User]):
     @log_create_with_context("user")
     async def batch_create_users(
         self, users_data: list[UserCreateRequest], operation_context: OperationContext
-    ) -> list[UserResponse]:
+    ) -> UserListResponseWrapper:
         """批量创建用户"""
         # 转换为字典列表并进行验证
         data_list = []
@@ -313,12 +342,13 @@ class UserService(BaseService[User]):
 
         # 使用BaseService的批量创建方法
         created_users = await self.bulk_create(data_list)
-        return [UserResponse.model_validate(user) for user in created_users]
+        users_response_data = [UserResponse.model_validate(user) for user in created_users]
+        return UserListResponseWrapper(message="批量创建用户成功", data=users_response_data)
 
     @log_update_with_context("user")
     async def batch_update_users(
         self, updates_data: list[dict], operation_context: OperationContext
-    ) -> list[UserResponse]:
+    ) -> UserListResponseWrapper:
         """批量更新用户"""
         # 提取所有要更新的ID
         update_ids = [update_item["id"] for update_item in updates_data]
@@ -348,10 +378,11 @@ class UserService(BaseService[User]):
 
         # 返回更新后的数据
         updated_users = await self.get_by_ids(update_ids)
-        return [UserResponse.model_validate(user) for user in updated_users]
+        users_response_data = [UserResponse.model_validate(user) for user in updated_users]
+        return UserListResponseWrapper(message="批量更新用户成功", data=users_response_data)
 
     @log_delete_with_context("user")
-    async def batch_delete_users(self, user_ids: list[UUID], operation_context: OperationContext) -> int:
+    async def batch_delete_users(self, user_ids: list[UUID], operation_context: OperationContext) -> UserDeleteResponse:
         """批量删除用户"""
         # 检查用户是否存在
         existing_users = await self.get_by_ids(user_ids)
@@ -369,4 +400,8 @@ class UserService(BaseService[User]):
             invalidate_user_permission_cache(user_id)
 
         # 使用BaseService的批量删除方法
-        return await self.delete_by_ids(user_ids, operation_context)
+        deleted_count = await self.delete_by_ids(user_ids, operation_context)
+        return UserDeleteResponse(
+            message="批量删除用户成功",
+            data={"deleted_count": deleted_count, "deleted_ids": [str(id) for id in user_ids]},
+        )

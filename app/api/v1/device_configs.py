@@ -15,7 +15,7 @@ from app.core.permissions.simple_decorators import (
     Permissions,
     require_permission,
 )
-from app.schemas.base import SuccessResponse
+from app.schemas.base import BaseResponse, SuccessResponse
 from app.schemas.device_config import (
     BatchConfigCompareRequest,
     BatchConfigCompareResponse,
@@ -52,7 +52,7 @@ from app.utils.deps import OperationContext, get_device_config_service
 router = APIRouter(prefix="/device-configs", tags=["设备配置管理"])
 
 
-@router.get("", response_model=DeviceConfigListResponse, summary="获取配置快照列表")
+@router.get("", response_model=BaseResponse[DeviceConfigListResponse], summary="获取配置快照列表")
 async def list_device_configs(
     query: DeviceConfigListRequest = Depends(),
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -67,10 +67,16 @@ async def list_device_configs(
     )
     # 转换为响应模型
     config_responses = [DeviceConfigResponse.model_validate(config) for config in configs]
-    return DeviceConfigListResponse(data=config_responses, total=total, page=query.page, page_size=query.page_size)
+    response_data = DeviceConfigListResponse(
+        data=config_responses,
+        total=total,
+        page=query.page,
+        page_size=query.page_size,
+    )
+    return BaseResponse(data=response_data)
 
 
-@router.get("/{config_id}", response_model=DeviceConfigDetailResponse, summary="获取配置快照详情")
+@router.get("/{config_id}", response_model=BaseResponse[DeviceConfigDetailResponse], summary="获取配置快照详情")
 async def get_device_config(
     config_id: UUID,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -80,10 +86,13 @@ async def get_device_config(
     config = await service.get_config_with_details(config_id)
     if not config:
         raise HTTPException(status_code=404, detail="配置快照不存在")
-    return DeviceConfigDetailResponse.model_validate(config)
+    result = DeviceConfigDetailResponse.model_validate(config)
+    return BaseResponse(data=result)
 
 
-@router.post("", response_model=DeviceConfigResponse, status_code=status.HTTP_201_CREATED, summary="创建配置快照")
+@router.post(
+    "", response_model=BaseResponse[DeviceConfigResponse], status_code=status.HTTP_201_CREATED, summary="创建配置快照"
+)
 async def create_device_config(
     config_data: DeviceConfigCreateRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -97,7 +106,8 @@ async def create_device_config(
         backup_reason=config_data.backup_reason,
         operation_context=operation_context,
     )
-    return DeviceConfigResponse.model_validate(config)
+    result = DeviceConfigResponse.model_validate(config)
+    return BaseResponse(data=result)
 
 
 @router.put("/{config_id}", response_model=DeviceConfigResponse, summary="更新配置快照")
@@ -129,7 +139,7 @@ async def delete_device_config(
 # ===== 配置对比功能 =====
 
 
-@router.post("/compare", response_model=DeviceConfigCompareResponse, summary="对比配置快照")
+@router.post("/compare", response_model=BaseResponse[DeviceConfigCompareResponse], summary="对比配置快照")
 async def compare_device_configs(
     compare_data: DeviceConfigCompareRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -150,7 +160,7 @@ async def compare_device_configs(
             }
         )
 
-    return DeviceConfigCompareResponse(
+    result = DeviceConfigCompareResponse(
         config1_info=DeviceConfigResponse.model_validate(comparison_result.config1_info),
         config2_info=DeviceConfigResponse.model_validate(comparison_result.config2_info),
         is_identical=comparison_result.summary.get("is_identical", True),
@@ -159,12 +169,15 @@ async def compare_device_configs(
         removed_lines=comparison_result.summary.get("lines_removed", 0),
         modified_lines=comparison_result.summary.get("lines_modified", 0),
     )
+    return BaseResponse(data=result)
 
 
 # ===== 设备相关的配置管理 =====
 
 
-@router.get("/device/{device_id}/latest", response_model=DeviceConfigResponse | None, summary="获取设备最新配置")
+@router.get(
+    "/device/{device_id}/latest", response_model=BaseResponse[DeviceConfigResponse | None], summary="获取设备最新配置"
+)
 async def get_device_latest_config(
     device_id: UUID,
     config_type: str = Query(default="running", description="配置类型"),
@@ -175,10 +188,13 @@ async def get_device_latest_config(
     config = await service.get_latest_config(device_id, config_type)
     if not config:
         raise HTTPException(status_code=404, detail="未找到设备的配置快照")
-    return DeviceConfigResponse.model_validate(config)
+    result = DeviceConfigResponse.model_validate(config)
+    return BaseResponse(data=result)
 
 
-@router.get("/device/{device_id}/history", response_model=list[DeviceConfigResponse], summary="获取设备配置历史")
+@router.get(
+    "/device/{device_id}/history", response_model=BaseResponse[list[DeviceConfigResponse]], summary="获取设备配置历史"
+)
 async def get_device_config_history(
     device_id: UUID,
     config_type: str | None = Query(default=None, description="配置类型筛选"),
@@ -188,10 +204,13 @@ async def get_device_config_history(
 ):
     """获取设备的配置历史记录"""
     configs = await service.get_device_configs(device_id, config_type, limit)
-    return [DeviceConfigResponse.model_validate(config) for config in configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in configs]
+    return BaseResponse(data=result)
 
 
-@router.get("/device/{device_id}/changes", response_model=list[DeviceConfigResponse], summary="获取设备配置变更")
+@router.get(
+    "/device/{device_id}/changes", response_model=BaseResponse[list[DeviceConfigResponse]], summary="获取设备配置变更"
+)
 async def get_device_config_changes(
     device_id: UUID,
     days: int = Query(default=30, description="查询天数", ge=1, le=365),
@@ -200,13 +219,14 @@ async def get_device_config_changes(
 ):
     """获取设备指定天数内的配置变更历史"""
     configs = await service.get_config_changes(device_id, days)
-    return [DeviceConfigResponse.model_validate(config) for config in configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in configs]
+    return BaseResponse(data=result)
 
 
 # ===== 批量操作功能 =====
 
 
-@router.post("/batch-backup", response_model=DeviceConfigBackupResponse, summary="批量备份设备配置")
+@router.post("/batch-backup", response_model=BaseResponse[DeviceConfigBackupResponse], summary="批量备份设备配置")
 async def batch_backup_device_configs(
     backup_data: DeviceConfigBackupRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -250,18 +270,19 @@ async def batch_backup_device_configs(
                 )
             )
 
-    return DeviceConfigBackupResponse(
+    result = DeviceConfigBackupResponse(
         total_count=len(backup_data.device_ids),
         success_count=success_count,
         failed_count=len(backup_data.device_ids) - success_count,
         results=results,
     )
+    return BaseResponse(data=result)
 
 
 # ===== 批量操作功能 =====
 
 
-@router.post("/batch", response_model=list[DeviceConfigResponse], summary="批量创建配置快照")
+@router.post("/batch", response_model=BaseResponse[list[DeviceConfigResponse]], summary="批量创建配置快照")
 async def batch_create_device_configs(
     configs_data: list[dict],  # [{"device_id": UUID, "config_type": str, "config_content": str, ...}]
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -269,10 +290,11 @@ async def batch_create_device_configs(
 ):
     """批量创建设备配置快照"""
     created_configs = await service.batch_create_configs(configs_data, operation_context)
-    return [DeviceConfigResponse.model_validate(config) for config in created_configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in created_configs]
+    return BaseResponse(data=result)
 
 
-@router.put("/batch", response_model=list[DeviceConfigResponse], summary="批量更新配置快照")
+@router.put("/batch", response_model=BaseResponse[list[DeviceConfigResponse]], summary="批量更新配置快照")
 async def batch_update_device_configs(
     updates_data: list[dict],  # [{"id": UUID, **update_fields}]
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -280,7 +302,8 @@ async def batch_update_device_configs(
 ):
     """批量更新设备配置快照"""
     updated_configs = await service.batch_update_configs(updates_data, operation_context)
-    return [DeviceConfigResponse.model_validate(config) for config in updated_configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in updated_configs]
+    return BaseResponse(data=result)
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除配置快照")
@@ -297,7 +320,7 @@ async def batch_delete_device_configs(
 # ===== 配置清理功能 =====
 
 
-@router.post("/cleanup", response_model=DeviceConfigCleanupResponse, summary="清理旧配置快照")
+@router.post("/cleanup", response_model=BaseResponse[DeviceConfigCleanupResponse], summary="清理旧配置快照")
 async def cleanup_old_configs(
     cleanup_data: DeviceConfigCleanupRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -314,10 +337,11 @@ async def cleanup_old_configs(
         # TODO: 实现清理所有设备的逻辑
         deleted_count = 0
 
-    return DeviceConfigCleanupResponse(
+    result = DeviceConfigCleanupResponse(
         deleted_count=deleted_count,
         freed_space=deleted_count * 1024,  # 估算释放空间
     )
+    return BaseResponse(data=result)
 
 
 @router.post("/cleanup/device/{device_id}", response_model=SuccessResponse, summary="清理指定设备旧配置")
@@ -335,17 +359,18 @@ async def cleanup_device_configs(
 # ===== 统计和搜索功能 =====
 
 
-@router.get("/statistics", response_model=dict[str, Any], summary="获取配置快照统计")
+@router.get("/statistics", response_model=BaseResponse[dict[str, Any]], summary="获取配置快照统计")
 async def get_config_statistics(
     device_id: UUID | None = Query(default=None, description="设备ID筛选"),
     service: DeviceConfigService = Depends(get_device_config_service),
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
 ):
     """获取配置快照的统计信息"""
-    return await service.get_config_statistics(device_id)
+    result = await service.get_config_statistics(device_id)
+    return BaseResponse(data=result)
 
 
-@router.get("/search", response_model=list[DeviceConfigResponse], summary="搜索配置快照")
+@router.get("/search", response_model=BaseResponse[list[DeviceConfigResponse]], summary="搜索配置快照")
 async def search_device_configs(
     device_id: UUID | None = Query(default=None, description="设备ID"),
     config_type: str | None = Query(default=None, description="配置类型"),
@@ -359,10 +384,11 @@ async def search_device_configs(
         config_type=config_type,
         backup_by=backup_by,
     )
-    return [DeviceConfigResponse.model_validate(config) for config in configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in configs]
+    return BaseResponse(data=result)
 
 
-@router.get("/recent", response_model=list[DeviceConfigResponse], summary="获取最近配置")
+@router.get("/recent", response_model=BaseResponse[list[DeviceConfigResponse]], summary="获取最近配置")
 async def get_recent_configs(
     days: int = Query(default=7, description="查询天数", ge=1, le=365),
     limit: int = Query(default=100, description="返回数量限制", ge=1, le=500),
@@ -371,10 +397,11 @@ async def get_recent_configs(
 ):
     """获取最近的配置快照"""
     configs = await service.get_recent_configs(days, limit)
-    return [DeviceConfigResponse.model_validate(config) for config in configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in configs]
+    return BaseResponse(data=result)
 
 
-@router.get("/user/{user_id}", response_model=list[DeviceConfigResponse], summary="获取用户配置快照")
+@router.get("/user/{user_id}", response_model=BaseResponse[list[DeviceConfigResponse]], summary="获取用户配置快照")
 async def get_user_configs(
     user_id: UUID,
     limit: int = Query(default=100, description="返回数量限制", ge=1, le=500),
@@ -383,13 +410,14 @@ async def get_user_configs(
 ):
     """获取用户备份的配置快照"""
     configs = await service.get_user_configs(user_id, limit)
-    return [DeviceConfigResponse.model_validate(config) for config in configs]
+    result = [DeviceConfigResponse.model_validate(config) for config in configs]
+    return BaseResponse(data=result)
 
 
 # ===== 配置验证功能 =====
 
 
-@router.post("/validate", response_model=dict[str, Any], summary="验证配置内容")
+@router.post("/validate", response_model=BaseResponse[dict[str, Any]], summary="验证配置内容")
 async def validate_config_content(
     config_content: str,
     config_type: str = Query(description="配置类型"),
@@ -397,13 +425,14 @@ async def validate_config_content(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONFIG_READ)),
 ):
     """验证配置内容的有效性"""
-    return await service.validate_config_content(config_content, config_type)
+    result = await service.validate_config_content(config_content, config_type)
+    return BaseResponse(data=result)
 
 
 # ===== 智能配置差异分析功能 =====
 
 
-@router.post("/smart-compare", response_model=SmartConfigCompareResponse, summary="智能配置差异对比")
+@router.post("/smart-compare", response_model=BaseResponse[SmartConfigCompareResponse], summary="智能配置差异对比")
 async def smart_compare_configs(
     request: SmartConfigCompareRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -450,7 +479,8 @@ async def smart_compare_configs(
             ],
         }
 
-        return SmartConfigCompareResponse(**response_data)
+        result = SmartConfigCompareResponse(**response_data)
+        return BaseResponse(data=result)
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -458,7 +488,7 @@ async def smart_compare_configs(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"配置对比失败: {str(e)}") from e
 
 
-@router.post("/compare-with-latest", response_model=SmartConfigCompareResponse, summary="与最新配置对比")
+@router.post("/compare-with-latest", response_model=BaseResponse[SmartConfigCompareResponse], summary="与最新配置对比")
 async def compare_with_latest_config(
     request: CompareWithLatestRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -503,7 +533,8 @@ async def compare_with_latest_config(
             ],
         }
 
-        return SmartConfigCompareResponse(**response_data)
+        result = SmartConfigCompareResponse(**response_data)
+        return BaseResponse(data=result)
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -511,7 +542,7 @@ async def compare_with_latest_config(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"配置对比失败: {str(e)}") from e
 
 
-@router.post("/diff-summary", response_model=ConfigDiffSummaryResponse, summary="获取配置变更摘要")
+@router.post("/diff-summary", response_model=BaseResponse[ConfigDiffSummaryResponse], summary="获取配置变更摘要")
 async def get_config_diff_summary(
     request: ConfigDiffSummaryRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -523,7 +554,8 @@ async def get_config_diff_summary(
             device_id=request.device_id, days=request.days, config_type=request.config_type
         )
 
-        return ConfigDiffSummaryResponse(**summary)
+        result = ConfigDiffSummaryResponse(**summary)
+        return BaseResponse(data=result)
 
     except Exception as e:
         raise HTTPException(
@@ -531,7 +563,7 @@ async def get_config_diff_summary(
         ) from e
 
 
-@router.post("/batch-compare", response_model=BatchConfigCompareResponse, summary="批量配置对比")
+@router.post("/batch-compare", response_model=BaseResponse[BatchConfigCompareResponse], summary="批量配置对比")
 async def batch_compare_configs(
     request: BatchConfigCompareRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -577,12 +609,13 @@ async def batch_compare_configs(
                     }
                 )
 
-        return BatchConfigCompareResponse(
+        result = BatchConfigCompareResponse(
             total_comparisons=len(results),
             successful_comparisons=successful_count,
             failed_comparisons=failed_count,
             results=batch_results,
         )
+        return BaseResponse(data=result)
 
     except Exception as e:
         raise HTTPException(
@@ -590,7 +623,7 @@ async def batch_compare_configs(
         ) from e
 
 
-@router.post("/export-diff-html", response_model=dict[str, str], summary="导出差异为HTML")
+@router.post("/export-diff-html", response_model=BaseResponse[dict[str, str]], summary="导出差异为HTML")
 async def export_diff_to_html(
     request: ExportDiffToHtmlRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -605,11 +638,12 @@ async def export_diff_to_html(
             ignore_comments=request.ignore_comments,
         )
 
-        return {
+        result = {
             "html_content": html_content,
             "content_type": "text/html",
             "filename": f"config_diff_{request.config1_id}_{request.config2_id}.html",
         }
+        return BaseResponse(data=result)
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -622,7 +656,7 @@ async def export_diff_to_html(
 # ===== 配置回滚功能 =====
 
 
-@router.post("/rollback/preview", response_model=ConfigRollbackPreviewResponse, summary="预览配置回滚")
+@router.post("/rollback/preview", response_model=BaseResponse[ConfigRollbackPreviewResponse], summary="预览配置回滚")
 async def preview_config_rollback(
     request: ConfigRollbackPreviewRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -634,7 +668,8 @@ async def preview_config_rollback(
             config_id=request.config_id, target_device_id=request.target_device_id
         )
 
-        return ConfigRollbackPreviewResponse(**preview_result)
+        result = ConfigRollbackPreviewResponse(**preview_result)
+        return BaseResponse(data=result)
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -644,7 +679,7 @@ async def preview_config_rollback(
         ) from e
 
 
-@router.post("/rollback", response_model=ConfigRollbackResponse, summary="执行配置回滚")
+@router.post("/rollback", response_model=BaseResponse[ConfigRollbackResponse], summary="执行配置回滚")
 async def rollback_config(
     request: ConfigRollbackRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -661,7 +696,8 @@ async def rollback_config(
             config_id=request.config_id, target_device_id=request.target_device_id, operation_context=operation_context
         )
 
-        return ConfigRollbackResponse(**rollback_result)
+        result = ConfigRollbackResponse(**rollback_result)
+        return BaseResponse(data=result)
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
@@ -669,7 +705,7 @@ async def rollback_config(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"配置回滚失败: {str(e)}") from e
 
 
-@router.post("/rollback/batch", response_model=BatchConfigRollbackResponse, summary="批量配置回滚")
+@router.post("/rollback/batch", response_model=BaseResponse[BatchConfigRollbackResponse], summary="批量配置回滚")
 async def batch_rollback_configs(
     request: BatchConfigRollbackRequest,
     service: DeviceConfigService = Depends(get_device_config_service),
@@ -703,12 +739,13 @@ async def batch_rollback_configs(
                 }
             )
 
-        return BatchConfigRollbackResponse(
+        result = BatchConfigRollbackResponse(
             total_rollbacks=len(results),
             successful_rollbacks=successful_count,
             failed_rollbacks=failed_count,
             results=batch_results,
         )
+        return BaseResponse(data=result)
 
     except Exception as e:
         raise HTTPException(

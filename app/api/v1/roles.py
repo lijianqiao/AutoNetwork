@@ -38,7 +38,13 @@ async def list_roles(
 ):
     """获取角色列表（分页），支持搜索和筛选"""
     roles, total = await service.get_roles(query, operation_context=operation_context)
-    return RoleListResponse(data=roles, total=total, page=query.page, page_size=query.page_size)
+    result = RoleListResponse(
+        data=[RoleResponse.model_validate(role) for role in roles],
+        total=total,
+        page=query.page,
+        page_size=query.page_size,
+    )
+    return result
 
 
 @router.get("/{role_id}", response_model=RoleDetailResponse, summary="获取角色详情")
@@ -48,7 +54,8 @@ async def get_role(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_READ)),
 ):
     """获取角色详情，包含其所有权限"""
-    return await service.get_role_detail(role_id, operation_context=operation_context)
+    result = await service.get_role_detail(role_id, operation_context=operation_context)
+    return result
 
 
 @router.post("", response_model=RoleResponse, status_code=status.HTTP_201_CREATED, summary="创建角色")
@@ -58,7 +65,8 @@ async def create_role(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_CREATE)),
 ):
     """创建新角色"""
-    return await service.create_role(role_data, operation_context=operation_context)
+    result = await service.create_role(role_data, operation_context=operation_context)
+    return result
 
 
 @router.put("/{role_id}", response_model=RoleResponse, summary="更新角色")
@@ -69,7 +77,8 @@ async def update_role(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_UPDATE)),
 ):
     """更新角色信息"""
-    return await service.update_role(role_id, role_data, operation_context=operation_context)
+    result = await service.update_role(role_id, role_data, operation_context=operation_context)
+    return result
 
 
 @router.delete("/{role_id}", response_model=SuccessResponse, summary="删除角色")
@@ -80,7 +89,8 @@ async def delete_role(
 ):
     """删除角色"""
     await service.delete_role(role_id, operation_context=operation_context)
-    return SuccessResponse()
+    result = SuccessResponse()
+    return result
 
 
 @router.put("/{role_id}/status", response_model=SuccessResponse, summary="更新角色状态")
@@ -92,7 +102,8 @@ async def update_role_status(
 ):
     """更新角色状态"""
     await service.update_role_status(role_id, is_active, operation_context=operation_context)
-    return SuccessResponse()
+    result = SuccessResponse()
+    return result
 
 
 @router.post("/{role_id}/permissions", response_model=RoleDetailResponse, summary="分配角色权限")
@@ -103,7 +114,8 @@ async def assign_role_permissions(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_ASSIGN_PERMISSIONS)),
 ):
     """分配角色权限（全量设置）"""
-    return await service.assign_permissions_to_role(role_id, permission_data, operation_context=operation_context)
+    result = await service.assign_permissions_to_role(role_id, permission_data, operation_context=operation_context)
+    return result
 
 
 # 角色权限关系管理端点
@@ -117,9 +129,10 @@ async def add_role_permissions(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_ASSIGN_PERMISSIONS)),
 ):
     """为角色增量添加权限"""
-    return await service.add_role_permissions(
+    result = await service.add_role_permissions(
         role_id, permission_data.permission_ids, operation_context=operation_context
     )
+    return result
 
 
 @router.delete("/{role_id}/permissions/remove", response_model=RoleDetailResponse, summary="移除角色权限")
@@ -130,9 +143,10 @@ async def remove_role_permissions(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_ASSIGN_PERMISSIONS)),
 ):
     """移除角色的指定权限"""
-    return await service.remove_role_permissions(
+    result = await service.remove_role_permissions(
         role_id, permission_data.permission_ids, operation_context=operation_context
     )
+    return result
 
 
 @router.get("/{role_id}/permissions", response_model=list[dict], summary="获取角色权限列表")
@@ -142,7 +156,8 @@ async def get_role_permissions(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_READ)),
 ):
     """获取角色的权限列表"""
-    return await service.get_role_permissions(role_id, operation_context=operation_context)
+    result = await service.get_role_permissions(role_id, operation_context=operation_context)
+    return result
 
 
 # ===== 批量操作功能 =====
@@ -155,7 +170,8 @@ async def batch_create_roles(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_CREATE)),
 ):
     """批量创建角色"""
-    return await service.batch_create_roles(roles_data, operation_context)
+    result = await service.batch_create_roles(roles_data, operation_context)
+    return result
 
 
 @router.put("/batch", response_model=list[RoleResponse], summary="批量更新角色")
@@ -165,7 +181,8 @@ async def batch_update_roles(
     operation_context: OperationContext = Depends(require_permission(Permissions.ROLE_UPDATE)),
 ):
     """批量更新角色"""
-    return await service.batch_update_roles(updates_data, operation_context)
+    result = await service.batch_update_roles(updates_data, operation_context)
+    return result
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除角色")
@@ -176,4 +193,5 @@ async def batch_delete_roles(
 ):
     """批量删除角色"""
     deleted_count = await service.batch_delete_roles(role_ids, operation_context)
-    return SuccessResponse(message=f"成功删除 {deleted_count} 个角色")
+    result = SuccessResponse(message=f"成功删除 {deleted_count} 个角色")
+    return result

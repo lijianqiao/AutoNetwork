@@ -8,20 +8,27 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
+from app.core.exceptions import NotFoundException
 from app.core.permissions.simple_decorators import (
     Permissions,
     require_permission,
 )
-from app.schemas.base import SuccessResponse
+from app.schemas.base import BaseResponse
 from app.schemas.device import (
+    DeviceBatchCreateResponse,
+    DeviceBatchDeleteResponse,
+    DeviceBatchUpdateResponse,
     DeviceCreateRequest,
-    DeviceDetailResponse,
+    DeviceCreateResponse,
+    DeviceDeleteResponse,
+    DeviceDetailResponseWrapper,
     DeviceListRequest,
     DeviceListResponse,
     DeviceResponse,
     DeviceUpdateRequest,
+    DeviceUpdateResponse,
 )
 from app.services.device import DeviceService
 from app.utils.deps import OperationContext, get_device_service
@@ -29,7 +36,7 @@ from app.utils.deps import OperationContext, get_device_service
 router = APIRouter(prefix="/devices", tags=["设备管理"])
 
 
-@router.get("", response_model=DeviceListResponse, summary="获取设备列表")
+@router.get("", response_model=BaseResponse[DeviceListResponse], summary="获取设备列表")
 async def list_devices(
     query: DeviceListRequest = Depends(),
     service: DeviceService = Depends(get_device_service),
@@ -37,10 +44,16 @@ async def list_devices(
 ):
     """获取设备列表（分页），支持搜索和筛选"""
     devices, total = await service.get_devices(query, operation_context=operation_context)
-    return DeviceListResponse(data=devices, total=total, page=query.page, page_size=query.page_size)
+    response_data = DeviceListResponse(
+        data=[DeviceResponse.model_validate(device) for device in devices],
+        total=total,
+        page=query.page,
+        page_size=query.page_size,
+    )
+    return BaseResponse(data=response_data)
 
 
-@router.get("/{device_id}", response_model=DeviceDetailResponse, summary="获取设备详情")
+@router.get("/{device_id}", response_model=BaseResponse[DeviceDetailResponseWrapper], summary="获取设备详情")
 async def get_device(
     device_id: UUID,
     service: DeviceService = Depends(get_device_service),
@@ -49,21 +62,24 @@ async def get_device(
     """获取设备详情"""
     device = await service.get_device_detail(device_id, operation_context=operation_context)
     if not device:
-        raise HTTPException(status_code=404, detail="设备不存在")
-    return device
+        raise NotFoundException(detail="设备不存在")
+    return BaseResponse(data=device)
 
 
-@router.post("", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED, summary="创建设备")
+@router.post(
+    "", response_model=BaseResponse[DeviceCreateResponse], status_code=status.HTTP_201_CREATED, summary="创建设备"
+)
 async def create_device(
     device_data: DeviceCreateRequest,
     service: DeviceService = Depends(get_device_service),
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CREATE)),
 ):
     """创建新设备"""
-    return await service.create_device(device_data, operation_context=operation_context)
+    result = await service.create_device(device_data, operation_context=operation_context)
+    return BaseResponse(data=result)
 
 
-@router.put("/{device_id}", response_model=DeviceResponse, summary="更新设备")
+@router.put("/{device_id}", response_model=BaseResponse[DeviceUpdateResponse], summary="更新设备")
 async def update_device(
     device_id: UUID,
     device_data: DeviceUpdateRequest,
@@ -71,10 +87,11 @@ async def update_device(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_UPDATE)),
 ):
     """更新设备信息"""
-    return await service.update_device(device_id, device_data, operation_context=operation_context)
+    result = await service.update_device(device_id, device_data, operation_context=operation_context)
+    return BaseResponse(data=result)
 
 
-@router.delete("/{device_id}", response_model=SuccessResponse, summary="删除设备")
+@router.delete("/{device_id}", response_model=BaseResponse[dict], summary="删除设备")
 async def delete_device(
     device_id: UUID,
     service: DeviceService = Depends(get_device_service),
@@ -82,33 +99,35 @@ async def delete_device(
 ):
     """删除设备"""
     await service.delete_device(device_id, operation_context=operation_context)
-    return SuccessResponse(message="设备删除成功")
+    return BaseResponse(data={"message": "设备删除成功"})
 
 
 # ===== 批量操作功能 =====
 
 
-@router.post("/batch", response_model=list[DeviceResponse], summary="批量创建设备")
+@router.post("/batch", response_model=BaseResponse[DeviceBatchCreateResponse], summary="批量创建设备")
 async def batch_create_devices(
     devices_data: list[DeviceCreateRequest],
     service: DeviceService = Depends(get_device_service),
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CREATE)),
 ):
     """批量创建设备"""
-    return await service.batch_create_devices(devices_data, operation_context)
+    result = await service.batch_create_devices(devices_data, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.put("/batch", response_model=list[DeviceResponse], summary="批量更新设备")
+@router.put("/batch", response_model=BaseResponse[DeviceBatchUpdateResponse], summary="批量更新设备")
 async def batch_update_devices(
     updates_data: list[dict],  # [{"id": UUID, "data": DeviceUpdateRequest}]
     service: DeviceService = Depends(get_device_service),
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_UPDATE)),
 ):
     """批量更新设备"""
-    return await service.batch_update_devices(updates_data, operation_context)
+    result = await service.batch_update_devices(updates_data, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.delete("/batch", response_model=SuccessResponse, summary="批量删除设备")
+@router.delete("/batch", response_model=DeviceBatchDeleteResponse, summary="批量删除设备")
 async def batch_delete_devices(
     device_ids: list[UUID],
     service: DeviceService = Depends(get_device_service),
@@ -116,10 +135,10 @@ async def batch_delete_devices(
 ):
     """批量删除设备"""
     deleted_count = await service.batch_delete_devices(device_ids, operation_context)
-    return SuccessResponse(message=f"成功删除 {deleted_count} 台设备")
+    return BaseResponse(data={"message": f"成功删除 {deleted_count} 台设备"})
 
 
-@router.post("/{device_id}/test-connection", response_model=dict, summary="测试设备连接")
+@router.post("/{device_id}/test-connection", response_model=DeviceDeleteResponse, summary="测试设备连接")
 async def test_device_connection(
     device_id: UUID,
     username: str = Query(description="登录用户名"),
@@ -129,9 +148,10 @@ async def test_device_connection(
 ):
     """测试设备连接性"""
     # TODO: 实现实际的设备连接测试逻辑
-    return {
+    result = {
         "device_id": device_id,
         "connection_status": "success",
         "message": "设备连接测试成功",
         "response_time": 150,
     }
+    return BaseResponse(data=result)

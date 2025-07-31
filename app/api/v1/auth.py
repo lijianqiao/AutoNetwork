@@ -13,13 +13,15 @@ from fastapi_throttle import RateLimiter
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
+    LogoutResponse,
+    ProfileResponse,
     RefreshTokenRequest,
-    TokenResponse,
     UpdateProfileRequest,
+    UpdateProfileResponse,
 )
-from app.schemas.base import SuccessResponse
-from app.schemas.user import UserDetailResponse, UserResponse
+from app.schemas.base import SuccessResponse, TokenResponse
 from app.services.auth import AuthService
 from app.utils.deps import get_auth_service, get_current_active_user
 
@@ -36,7 +38,8 @@ async def login(
     """用户登录接口"""
     user_agent = request.headers.get("user-agent", "unknown")
     client_ip = request.client.host if request.client else "unknown"
-    return await auth_service.login(login_data, client_ip, user_agent)
+    result = await auth_service.login(login_data, client_ip, user_agent)
+    return result.data
 
 
 @router.post("/login/form", response_model=TokenResponse, summary="表单登录", dependencies=[Depends(login_limiter)])
@@ -49,10 +52,11 @@ async def login_form(
     user_agent = request.headers.get("user-agent", "unknown")
     client_ip = request.client.host if request.client else "unknown"
     login_data = LoginRequest(username=form_data.username, password=form_data.password)
-    return await auth_service.login(login_data, client_ip, user_agent)
+    result = await auth_service.login(login_data, client_ip, user_agent)
+    return result.data
 
 
-@router.post("/logout", response_model=SuccessResponse, summary="用户登出")
+@router.post("/logout", response_model=LogoutResponse, summary="用户登出")
 async def logout(
     auth_service: AuthService = Depends(get_auth_service),
     current_user: User = Depends(get_current_active_user),
@@ -68,10 +72,11 @@ async def refresh_token(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     """刷新访问令牌"""
-    return await auth_service.refresh_token(refresh_data.refresh_token)
+    result = await auth_service.refresh_token(refresh_data.refresh_token)
+    return result.data
 
 
-@router.get("/profile", response_model=UserDetailResponse, summary="获取用户信息")
+@router.get("/profile", response_model=ProfileResponse, summary="获取用户信息")
 async def get_profile(
     auth_service: AuthService = Depends(get_auth_service),
     current_user: User = Depends(get_current_active_user),
@@ -80,7 +85,7 @@ async def get_profile(
     return await auth_service.get_current_user_profile(current_user)
 
 
-@router.put("/profile", response_model=UserResponse, summary="更新用户信息")
+@router.put("/profile", response_model=UpdateProfileResponse, summary="更新用户信息")
 async def update_profile(
     profile_data: UpdateProfileRequest,
     auth_service: AuthService = Depends(get_auth_service),
@@ -90,7 +95,7 @@ async def update_profile(
     return await auth_service.update_current_user_profile(current_user, profile_data)
 
 
-@router.put("/password", response_model=SuccessResponse, summary="修改密码")
+@router.put("/password", response_model=ChangePasswordResponse, summary="修改密码")
 async def change_password(
     password_data: ChangePasswordRequest,
     auth_service: AuthService = Depends(get_auth_service),

@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, IPvAnyAddress
 
 from app.schemas.base import (
+    BaseResponse,
     ListQueryRequest,
     ORMBase,
     PaginatedResponse,
@@ -154,3 +155,52 @@ class DeviceAuthTypeUpdateRequest(BaseModel):
     auth_type: Literal["dynamic", "static"] = Field(description="认证类型")
     static_username: str | None = Field(default=None, description="静态用户名", max_length=200)
     static_password: str | None = Field(default=None, description="静态密码", max_length=200)
+
+
+# BaseResponse包装的响应类型
+class DeviceCreateResponse(BaseResponse[DeviceResponse]):
+    """创建设备响应"""
+
+    pass
+
+
+class DeviceUpdateResponse(BaseResponse[DeviceResponse]):
+    """更新设备响应"""
+
+    pass
+
+
+class DeviceDetailResponseWrapper(BaseResponse[DeviceDetailResponse]):
+    """设备详情响应包装"""
+
+    pass
+
+
+class DeviceDeleteResponse(BaseResponse[dict]):
+    """删除设备响应"""
+
+    pass
+
+
+class DeviceBatchCreateResponse(BaseResponse[list[DeviceResponse]]):
+    """批量创建设备响应"""
+
+    pass
+
+
+class DeviceBatchUpdateResponse(BaseResponse[list[DeviceResponse]]):
+    """批量更新设备响应"""
+
+    pass
+
+
+class DeviceBatchDeleteResponse(BaseResponse[dict]):
+    """批量删除设备响应"""
+
+    pass
+
+
+class DeviceConnectionTestResponseWrapper(BaseResponse[DeviceConnectionTestResponse]):
+    """设备连接测试响应包装"""
+
+    pass

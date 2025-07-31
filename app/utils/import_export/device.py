@@ -549,7 +549,9 @@ class DeviceImportExportService(BaseImportExportService):
                     updated_device = await self.device_service.update_device(
                         existing_device.id, update_request, operation_context
                     )
-                    imported_ids.append(str(updated_device.id))
+                    if not updated_device.data:
+                        raise BusinessException(f"更新设备失败: {device_data['hostname']}")
+                    imported_ids.append(str(updated_device.data.id))
                     success_count += 1
                     logger.info(f"更新设备: {device_data['hostname']}")
 
@@ -560,7 +562,9 @@ class DeviceImportExportService(BaseImportExportService):
 
                     create_request = DeviceCreateRequest(**device_data)
                     new_device = await self.device_service.create_device(create_request, operation_context)
-                    imported_ids.append(str(new_device.id))
+                    if not new_device.data:
+                        raise BusinessException(f"创建设备失败: {device_data['hostname']}")
+                    imported_ids.append(str(new_device.data.id))
                     success_count += 1
                     logger.info(f"创建设备: {device_data['hostname']}")
 

@@ -37,7 +37,8 @@ async def list_regions(
 ):
     """获取基地列表（分页），支持搜索和筛选"""
     regions, total = await service.get_regions(query, operation_context=operation_context)
-    return RegionListResponse(data=regions, total=total, page=query.page, page_size=query.page_size)
+    result = RegionListResponse(data=regions, total=total, page=query.page, page_size=query.page_size)
+    return result
 
 
 @router.get("/{region_id}", response_model=RegionDetailResponse, summary="获取基地详情")
@@ -50,7 +51,8 @@ async def get_region(
     region = await service.get_region_detail(region_id, operation_context=operation_context)
     if not region:
         raise HTTPException(status_code=404, detail="基地不存在")
-    return region
+    result = region
+    return result
 
 
 @router.post("", response_model=RegionResponse, status_code=status.HTTP_201_CREATED, summary="创建基地")
@@ -60,7 +62,8 @@ async def create_region(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_CREATE)),
 ):
     """创建新基地"""
-    return await service.create_region(region_data, operation_context=operation_context)
+    result = await service.create_region(region_data, operation_context=operation_context)
+    return result
 
 
 @router.put("/{region_id}", response_model=RegionResponse, summary="更新基地")
@@ -71,7 +74,8 @@ async def update_region(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_UPDATE)),
 ):
     """更新基地信息"""
-    return await service.update_region(region_id, region_data, operation_context=operation_context)
+    result = await service.update_region(region_id, region_data, operation_context=operation_context)
+    return result
 
 
 @router.delete("/{region_id}", response_model=SuccessResponse, summary="删除基地")
@@ -82,7 +86,8 @@ async def delete_region(
 ):
     """删除基地"""
     await service.delete_region(region_id, operation_context=operation_context)
-    return SuccessResponse(message="基地删除成功")
+    result = SuccessResponse(message="基地删除成功")
+    return result
 
 
 # ===== 批量操作功能 =====
@@ -95,7 +100,8 @@ async def batch_create_regions(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_CREATE)),
 ):
     """批量创建基地"""
-    return await service.batch_create_regions(regions_data, operation_context)
+    result = await service.batch_create_regions(regions_data, operation_context)
+    return result
 
 
 @router.put("/batch", response_model=list[RegionResponse], summary="批量更新基地")
@@ -105,7 +111,8 @@ async def batch_update_regions(
     operation_context: OperationContext = Depends(require_permission(Permissions.REGION_UPDATE)),
 ):
     """批量更新基地"""
-    return await service.batch_update_regions(updates_data, operation_context)
+    result = await service.batch_update_regions(updates_data, operation_context)
+    return result
 
 
 @router.delete("/batch", response_model=SuccessResponse, summary="批量删除基地")
@@ -116,7 +123,8 @@ async def batch_delete_regions(
 ):
     """批量删除基地"""
     deleted_count = await service.batch_delete_regions(region_ids, operation_context)
-    return SuccessResponse(message=f"成功删除 {deleted_count} 个基地")
+    result = SuccessResponse(message=f"成功删除 {deleted_count} 个基地")
+    return result
 
 
 @router.get("/code/{region_code}", response_model=RegionDetailResponse, summary="根据代码获取基地")
@@ -129,4 +137,5 @@ async def get_region_by_code(
     region = await service.get_region_by_code(region_code, operation_context=operation_context)
     if not region:
         raise HTTPException(status_code=404, detail="基地不存在")
-    return region
+    result = region
+    return result

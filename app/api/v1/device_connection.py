@@ -6,8 +6,6 @@
 @Docs: 设备连接管理API控制器 - 提供设备连接测试、认证管理、连接池管理等RESTful接口
 """
 
-from datetime import datetime
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.core.exceptions import BusinessException
 from app.models.user import User
+from app.schemas.base import BaseResponse
 from app.services.device_connection import DeviceConnectionService
 from app.utils.deps import get_current_user
 from app.utils.logger import logger
@@ -73,14 +72,7 @@ class DevicesByCriteriaTestRequest(BaseModel):
     max_concurrent: int = Field(20, ge=1, le=50, description="最大并发数")
 
 
-# 响应模型
-class ApiResponse(BaseModel):
-    """API响应基础模型"""
-
-    success: bool = Field(..., description="操作是否成功")
-    message: str = Field(..., description="响应消息")
-    data: Any | None = Field(None, description="响应数据")
-    timestamp: datetime = Field(default_factory=datetime.now, description="响应时间")
+# 响应模型已移至 app.schemas.base
 
 
 # 依赖注入
@@ -89,7 +81,7 @@ def get_device_connection_service() -> DeviceConnectionService:
     return DeviceConnectionService()
 
 
-@router.post("/test", response_model=ApiResponse, summary="测试单个设备连接")
+@router.post("/test", response_model=BaseResponse[dict], summary="测试单个设备连接")
 async def test_device_connection(
     request: DeviceConnectionTestRequest,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -106,11 +98,7 @@ async def test_device_connection(
             dynamic_password=request.dynamic_password,
         )
 
-        return ApiResponse(
-            success=True,
-            message="设备连接测试完成",
-            data=result,
-        )
+        return BaseResponse(data=result, message="设备连接测试完成")
 
     except BusinessException as e:
         logger.warning(f"设备连接测试业务异常: {e}")
@@ -126,7 +114,7 @@ async def test_device_connection(
         ) from e
 
 
-@router.post("/test/batch", response_model=ApiResponse, summary="批量测试设备连接")
+@router.post("/test/batch", response_model=BaseResponse[dict], summary="批量测试设备连接")
 async def test_batch_device_connections(
     request: BatchConnectionTestRequest,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -165,11 +153,7 @@ async def test_batch_device_connections(
             max_concurrent=request.max_concurrent,
         )
 
-        return ApiResponse(
-            success=True,
-            message="批量设备连接测试完成",
-            data=result,
-        )
+        return BaseResponse(data=result, message="批量设备连接测试完成")
 
     except BusinessException as e:
         logger.warning(f"批量设备连接测试业务异常: {e}")
@@ -185,7 +169,7 @@ async def test_batch_device_connections(
         ) from e
 
 
-@router.post("/test/stability", response_model=ApiResponse, summary="测试设备连接稳定性")
+@router.post("/test/stability", response_model=BaseResponse[dict], summary="测试设备连接稳定性")
 async def test_connection_stability(
     request: ConnectionStabilityTestRequest,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -201,11 +185,7 @@ async def test_connection_stability(
             interval=request.interval,
         )
 
-        return ApiResponse(
-            success=True,
-            message="设备连接稳定性测试完成",
-            data=result,
-        )
+        return BaseResponse(data=result, message="设备连接稳定性测试完成")
 
     except BusinessException as e:
         logger.warning(f"设备连接稳定性测试业务异常: {e}")
@@ -221,7 +201,7 @@ async def test_connection_stability(
         ) from e
 
 
-@router.get("/credentials/{device_id}", response_model=ApiResponse, summary="获取设备认证凭据")
+@router.get("/credentials/{device_id}", response_model=BaseResponse[dict], summary="获取设备认证凭据")
 async def get_device_credentials(
     device_id: UUID,
     dynamic_password: str | None = Query(None, description="动态密码"),
@@ -237,11 +217,7 @@ async def get_device_credentials(
             dynamic_password=dynamic_password,
         )
 
-        return ApiResponse(
-            success=True,
-            message="获取设备认证凭据成功",
-            data=result,
-        )
+        return BaseResponse(data=result, message="获取设备认证凭据成功")
 
     except BusinessException as e:
         logger.warning(f"获取设备认证凭据业务异常: {e}")
@@ -257,7 +233,7 @@ async def get_device_credentials(
         ) from e
 
 
-@router.post("/credentials/validate", response_model=ApiResponse, summary="验证设备认证凭据")
+@router.post("/credentials/validate", response_model=BaseResponse[dict], summary="验证设备认证凭据")
 async def validate_device_credentials(
     request: CredentialsValidationRequest,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -274,11 +250,7 @@ async def validate_device_credentials(
             ssh_port=request.ssh_port,
         )
 
-        return ApiResponse(
-            success=True,
-            message="设备认证凭据验证完成",
-            data=result,
-        )
+        return BaseResponse(data=result, message="设备认证凭据验证完成")
 
     except BusinessException as e:
         logger.warning(f"验证设备认证凭据业务异常: {e}")
@@ -294,7 +266,7 @@ async def validate_device_credentials(
         ) from e
 
 
-@router.post("/password/encrypt", response_model=ApiResponse, summary="加密设备密码")
+@router.post("/password/encrypt", response_model=BaseResponse[dict], summary="加密设备密码")
 async def encrypt_device_password(
     request: PasswordEncryptionRequest,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -306,11 +278,7 @@ async def encrypt_device_password(
 
         result = await service.encrypt_device_password(request.password)
 
-        return ApiResponse(
-            success=True,
-            message="设备密码加密成功",
-            data=result,
-        )
+        return BaseResponse(data=result, message="设备密码加密成功")
 
     except BusinessException as e:
         logger.warning(f"加密设备密码业务异常: {e}")
@@ -326,7 +294,7 @@ async def encrypt_device_password(
         ) from e
 
 
-@router.get("/pool/stats", response_model=ApiResponse, summary="获取连接池统计信息")
+@router.get("/pool/stats", response_model=BaseResponse[dict], summary="获取连接池统计信息")
 async def get_connection_pool_stats(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
@@ -337,11 +305,7 @@ async def get_connection_pool_stats(
 
         result = await service.get_connection_pool_stats()
 
-        return ApiResponse(
-            success=True,
-            message="获取连接池统计信息成功",
-            data=result,
-        )
+        return BaseResponse(data=result, message="获取连接池统计信息成功")
 
     except BusinessException as e:
         logger.warning(f"获取连接池统计信息业务异常: {e}")
@@ -357,7 +321,7 @@ async def get_connection_pool_stats(
         ) from e
 
 
-@router.get("/manager/stats", response_model=ApiResponse, summary="获取连接管理器统计信息")
+@router.get("/manager/stats", response_model=BaseResponse[dict], summary="获取连接管理器统计信息")
 async def get_connection_manager_stats(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
@@ -368,11 +332,7 @@ async def get_connection_manager_stats(
 
         result = await service.get_connection_manager_stats()
 
-        return ApiResponse(
-            success=True,
-            message="获取连接管理器统计信息成功",
-            data=result,
-        )
+        return BaseResponse(data=result, message="获取连接管理器统计信息成功")
 
     except BusinessException as e:
         logger.warning(f"获取连接管理器统计信息业务异常: {e}")
@@ -388,7 +348,7 @@ async def get_connection_manager_stats(
         ) from e
 
 
-@router.post("/pool/cleanup", response_model=ApiResponse, summary="清理空闲连接")
+@router.post("/pool/cleanup", response_model=BaseResponse[dict], summary="清理空闲连接")
 async def cleanup_idle_connections(
     idle_timeout: int | None = Query(None, ge=60, le=3600, description="空闲超时时间（秒）"),
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -400,11 +360,7 @@ async def cleanup_idle_connections(
 
         result = await service.cleanup_idle_connections(idle_timeout)
 
-        return ApiResponse(
-            success=True,
-            message="清理空闲连接完成",
-            data=result,
-        )
+        return BaseResponse(data=result, message="清理空闲连接完成")
 
     except BusinessException as e:
         logger.warning(f"清理空闲连接业务异常: {e}")
@@ -420,7 +376,7 @@ async def cleanup_idle_connections(
         ) from e
 
 
-@router.delete("/close/{device_id}", response_model=ApiResponse, summary="关闭设备连接")
+@router.delete("/close/{device_id}", response_model=BaseResponse[dict], summary="关闭设备连接")
 async def close_device_connection(
     device_id: UUID,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -432,11 +388,7 @@ async def close_device_connection(
 
         result = await service.close_device_connection(device_id)
 
-        return ApiResponse(
-            success=True,
-            message="设备连接已关闭",
-            data=result,
-        )
+        return BaseResponse(data=result, message="设备连接已关闭")
 
     except BusinessException as e:
         logger.warning(f"关闭设备连接业务异常: {e}")
@@ -452,7 +404,7 @@ async def close_device_connection(
         ) from e
 
 
-@router.post("/pool/start", response_model=ApiResponse, summary="启动连接池")
+@router.post("/pool/start", response_model=BaseResponse[dict], summary="启动连接池")
 async def start_connection_pool(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
@@ -463,11 +415,7 @@ async def start_connection_pool(
 
         result = await service.start_connection_pool()
 
-        return ApiResponse(
-            success=True,
-            message="连接池已启动",
-            data=result,
-        )
+        return BaseResponse(data=result, message="连接池已启动")
 
     except BusinessException as e:
         logger.warning(f"启动连接池业务异常: {e}")
@@ -483,7 +431,7 @@ async def start_connection_pool(
         ) from e
 
 
-@router.post("/pool/stop", response_model=ApiResponse, summary="停止连接池")
+@router.post("/pool/stop", response_model=BaseResponse[dict], summary="停止连接池")
 async def stop_connection_pool(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
@@ -494,11 +442,7 @@ async def stop_connection_pool(
 
         result = await service.stop_connection_pool()
 
-        return ApiResponse(
-            success=True,
-            message="连接池已停止",
-            data=result,
-        )
+        return BaseResponse(data=result, message="连接池已停止")
 
     except BusinessException as e:
         logger.warning(f"停止连接池业务异常: {e}")
@@ -514,7 +458,7 @@ async def stop_connection_pool(
         ) from e
 
 
-@router.post("/test/criteria", response_model=ApiResponse, summary="根据条件批量测试设备")
+@router.post("/test/criteria", response_model=BaseResponse[dict], summary="根据条件批量测试设备")
 async def test_devices_by_criteria(
     request: DevicesByCriteriaTestRequest,
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -533,11 +477,7 @@ async def test_devices_by_criteria(
             max_concurrent=request.max_concurrent,
         )
 
-        return ApiResponse(
-            success=True,
-            message="根据条件批量测试设备完成",
-            data=result,
-        )
+        return BaseResponse(data=result, message="根据条件批量测试设备完成")
 
     except BusinessException as e:
         logger.warning(f"根据条件批量测试设备业务异常: {e}")
@@ -553,7 +493,7 @@ async def test_devices_by_criteria(
         ) from e
 
 
-@router.delete("/cache/password", response_model=ApiResponse, summary="清除动态密码缓存")
+@router.delete("/cache/password", response_model=BaseResponse[dict], summary="清除动态密码缓存")
 async def clear_dynamic_password_cache(
     device_id: UUID | None = Query(None, description="设备ID，为空则清除所有缓存"),
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -565,11 +505,7 @@ async def clear_dynamic_password_cache(
 
         result = service.clear_dynamic_password_cache(device_id)
 
-        return ApiResponse(
-            success=True,
-            message="动态密码缓存已清除",
-            data=result,
-        )
+        return BaseResponse(data=result, message="动态密码缓存已清除")
 
     except BusinessException as e:
         logger.warning(f"清除动态密码缓存业务异常: {e}")
@@ -585,7 +521,7 @@ async def clear_dynamic_password_cache(
         ) from e
 
 
-@router.get("/cache/password/info", response_model=ApiResponse, summary="获取缓存密码信息")
+@router.get("/cache/password/info", response_model=BaseResponse[dict], summary="获取缓存密码信息")
 async def get_cached_password_info(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
@@ -596,11 +532,7 @@ async def get_cached_password_info(
 
         result = service.get_cached_password_info()
 
-        return ApiResponse(
-            success=True,
-            message="获取缓存密码信息成功",
-            data=result,
-        )
+        return BaseResponse(data=result, message="获取缓存密码信息成功")
 
     except BusinessException as e:
         logger.warning(f"获取缓存密码信息业务异常: {e}")
@@ -616,7 +548,7 @@ async def get_cached_password_info(
         ) from e
 
 
-@router.get("/statistics", response_model=ApiResponse, summary="获取测试统计信息")
+@router.get("/statistics", response_model=BaseResponse[dict], summary="获取测试统计信息")
 async def get_test_statistics(
     device_ids: list[UUID] | None = Query(None, description="设备ID列表，为空则统计所有设备"),
     service: DeviceConnectionService = Depends(get_device_connection_service),
@@ -628,11 +560,7 @@ async def get_test_statistics(
 
         result = await service.get_test_statistics(device_ids)
 
-        return ApiResponse(
-            success=True,
-            message="获取测试统计信息成功",
-            data=result,
-        )
+        return BaseResponse(data=result, message="获取测试统计信息成功")
 
     except BusinessException as e:
         logger.warning(f"获取测试统计信息业务异常: {e}")

@@ -10,13 +10,16 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.base import AuthRequest, BaseResponse, PasswordUpdateRequest, TokenResponse
 from app.schemas.types import ObjectUUID
-from app.schemas.user import UserDetailResponse
+from app.schemas.user import UserDetailResponse, UserResponse
 
 
 class TokenPayload(BaseModel):
     """JWT 令牌载荷"""
 
     sub: ObjectUUID = Field(description="用户ID (subject)")
+    username: str | None = Field(default=None, description="用户名")
+    is_superuser: bool = Field(default=False, description="是否为超级用户")
+    is_active: bool = Field(default=True, description="是否为活跃用户")
 
 
 class LoginRequest(AuthRequest):
@@ -59,6 +62,30 @@ class ChangePasswordRequest(PasswordUpdateRequest):
 
 class ProfileResponse(BaseResponse[UserDetailResponse]):
     """获取个人信息响应"""
+
+    pass
+
+
+class RefreshTokenResponse(BaseResponse[TokenResponse]):
+    """刷新令牌响应"""
+
+    pass
+
+
+class UpdateProfileResponse(BaseResponse[UserResponse]):
+    """更新个人信息响应"""
+
+    pass
+
+
+class ChangePasswordResponse(BaseResponse[dict]):
+    """修改密码响应"""
+
+    pass
+
+
+class LogoutResponse(BaseResponse[dict]):
+    """登出响应"""
 
     pass
 

@@ -11,19 +11,19 @@ from fastapi import APIRouter, Depends
 from app.core.permissions.simple_decorators import require_permission
 from app.models.user import User
 from app.schemas.authentication import (
-    AuthenticationConfigResponse,
+    AuthenticationConfigInfo,
     AuthenticationTestRequest,
-    AuthenticationTestResponse,
+    AuthenticationTestResult,
     BatchAuthenticationTestRequest,
-    BatchAuthenticationTestResponse,
+    BatchAuthenticationTestResult,
     DeviceCredentialsRequest,
     DeviceCredentialsResponse,
-    DynamicPasswordCacheResponse,
+    DynamicPasswordCacheInfo,
     DynamicPasswordClearRequest,
     UsernameGenerationRequest,
-    UsernameGenerationResponse,
+    UsernameGenerationResult,
 )
-from app.schemas.base import SuccessResponse
+from app.schemas.base import BaseResponse, SuccessResponse
 from app.services.authentication import AuthenticationManager
 from app.utils.deps import get_current_active_user
 from app.utils.logger import logger
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/authentication", tags=["设备认证管理"])
 
 @router.post(
     "/credentials",
-    response_model=DeviceCredentialsResponse,
+    response_model=BaseResponse[DeviceCredentialsResponse],
     summary="获取设备认证凭据",
     dependencies=[Depends(require_permission("device:read"))],
 )
@@ -64,7 +64,7 @@ async def get_device_credentials(
         region = await device.region
         vendor = await device.vendor
 
-        return DeviceCredentialsResponse(
+        credentials_data = DeviceCredentialsResponse(
             device_id=str(device.id),
             hostname=device.hostname,
             ip_address=device.ip_address,
@@ -78,6 +78,8 @@ async def get_device_credentials(
             scrapli_platform=vendor.scrapli_platform if vendor else "",
         )
 
+        return BaseResponse(data=credentials_data, message="获取设备认证凭据成功")
+
     except Exception as e:
         logger.error(f"获取设备认证凭据失败: device_id={request.device_id}, error={e}")
         raise
@@ -85,7 +87,7 @@ async def get_device_credentials(
 
 @router.post(
     "/test",
-    response_model=AuthenticationTestResponse,
+    response_model=BaseResponse[AuthenticationTestResult],
     summary="测试设备认证",
     dependencies=[Depends(require_permission("device:read"))],
 )
@@ -119,8 +121,6 @@ async def test_device_authentication(
         # 验证凭据
         is_valid = await auth_manager.validate_device_credentials(request.device_id, credentials)
 
-        from app.schemas.authentication import AuthenticationTestResult
-
         result = AuthenticationTestResult(
             success=is_valid,
             device_id=str(device.id),
@@ -139,21 +139,20 @@ async def test_device_authentication(
             message="认证测试完成",
         )
 
-        return AuthenticationTestResponse(data=result, message="认证测试完成")
+        return BaseResponse(data=result, message="认证测试完成")
 
     except Exception as e:
         logger.error(f"测试设备认证失败: device_id={request.device_id}, error={e}")
-        from app.schemas.authentication import AuthenticationTestResult
 
         result = AuthenticationTestResult(
             success=False, device_id=str(request.device_id), error=str(e), message="认证测试失败"
         )
-        return AuthenticationTestResponse(data=result, message="认证测试失败")
+        return BaseResponse(data=result, message="认证测试失败")
 
 
 @router.post(
     "/test/batch",
-    response_model=BatchAuthenticationTestResponse,
+    response_model=BaseResponse[BatchAuthenticationTestResult],
     summary="批量测试设备认证",
     dependencies=[Depends(require_permission("device:read"))],
 )
@@ -195,8 +194,6 @@ async def batch_test_device_authentication(
             # 验证凭据
             is_valid = await auth_manager.validate_device_credentials(device_id, credentials)
 
-            from app.schemas.authentication import AuthenticationTestResult
-
             result = AuthenticationTestResult(
                 success=is_valid,
                 device_id=str(device.id),
@@ -224,7 +221,6 @@ async def batch_test_device_authentication(
 
         except Exception as e:
             logger.error(f"批量测试中设备认证失败: device_id={device_id}, error={e}")
-            from app.schemas.authentication import AuthenticationTestResult
 
             error_result = AuthenticationTestResult(
                 success=False, device_id=str(device_id), error=str(e), message="认证测试异常"
@@ -235,7 +231,6 @@ async def batch_test_device_authentication(
     total_count = len(request.device_ids)
     summary = f"总计 {total_count} 个设备，成功 {success_count} 个，失败 {failed_count} 个"
 
-    from app.schemas.authentication import BatchAuthenticationTestResult
     batch_result = BatchAuthenticationTestResult(
         total_count=total_count,
         success_count=success_count,
@@ -244,7 +239,7 @@ async def batch_test_device_authentication(
         summary=summary,
     )
 
-    return BatchAuthenticationTestResponse(
+    return BaseResponse(
         data=batch_result,
         message="批量认证测试完成",
     )
@@ -252,7 +247,7 @@ async def batch_test_device_authentication(
 
 @router.post(
     "/username/generate",
-    response_model=UsernameGenerationResponse,
+    response_model=BaseResponse[UsernameGenerationResult],
     summary="生成动态用户名",
     dependencies=[Depends(require_permission("authentication:access"))],
 )
@@ -276,7 +271,6 @@ async def generate_dynamic_username(
     # 生成用户名
     username = pattern.format(region_code=request.region_code.lower(), network_layer=request.network_layer)
 
-    from app.schemas.authentication import UsernameGenerationResult
     result = UsernameGenerationResult(
         network_layer=request.network_layer,
         region_code=request.region_code,
@@ -284,7 +278,7 @@ async def generate_dynamic_username(
         pattern_used=pattern,
     )
 
-    return UsernameGenerationResponse(
+    return BaseResponse(
         data=result,
         message="用户名生成成功",
     )
@@ -319,7 +313,7 @@ async def clear_dynamic_password_cache(
 
 @router.get(
     "/cache/info",
-    response_model=DynamicPasswordCacheResponse,
+    response_model=BaseResponse[DynamicPasswordCacheInfo],
     summary="获取动态密码缓存信息",
     dependencies=[Depends(require_permission("authentication:read"))],
 )
@@ -335,13 +329,12 @@ async def get_dynamic_password_cache_info(
     auth_manager = AuthenticationManager()
     cached_count = auth_manager.get_cached_password_count()
 
-    from app.schemas.authentication import DynamicPasswordCacheInfo
     cache_info = DynamicPasswordCacheInfo(
         cached_count=cached_count,
         message=f"当前缓存了 {cached_count} 个动态密码"
     )
 
-    return DynamicPasswordCacheResponse(
+    return BaseResponse(
         data=cache_info,
         message="获取缓存信息成功",
     )
@@ -349,7 +342,7 @@ async def get_dynamic_password_cache_info(
 
 @router.get(
     "/config",
-    response_model=AuthenticationConfigResponse,
+    response_model=BaseResponse[AuthenticationConfigInfo],
     summary="获取认证配置信息",
     dependencies=[Depends(require_permission("authentication:read"))],
 )
@@ -365,7 +358,6 @@ async def get_authentication_config(
     auth_manager = AuthenticationManager()
     cached_count = auth_manager.get_cached_password_count()
 
-    from app.schemas.authentication import AuthenticationConfigInfo
     config_info = AuthenticationConfigInfo(
         username_patterns=auth_manager.username_patterns,
         supported_auth_types=["dynamic", "static"],
@@ -373,7 +365,7 @@ async def get_authentication_config(
         current_cached_count=cached_count,
     )
 
-    return AuthenticationConfigResponse(
+    return BaseResponse(
         data=config_info,
         message="获取认证配置成功",
     )

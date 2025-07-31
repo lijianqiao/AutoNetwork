@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.v1.permissions import Permissions
 from app.core.permissions.simple_decorators import OperationContext, require_permission
+from app.schemas.base import BaseResponse
 from app.schemas.universal_query import (
     TemplateCommandsPreviewRequest,
     TemplateParametersValidationRequest,
@@ -27,11 +28,11 @@ router = APIRouter(prefix="/universal-query", tags=["通用查询"])
 universal_query_service = UniversalQueryService()
 
 
-@router.post("/template", summary="执行基于模板的查询")
+@router.post("/template", summary="执行基于模板的查询", response_model=BaseResponse[dict[str, Any]])
 async def execute_template_query(
     request: TemplateQueryRequest,
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_EXECUTE)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     执行基于模板的查询
 
@@ -49,14 +50,15 @@ async def execute_template_query(
     - 需要精确控制查询参数的场景
     - 需要版本控制的查询场景
     """
-    return await universal_query_service.execute_template_query(request, operation_context)
+    result = await universal_query_service.execute_template_query(request, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.post("/template-type", summary="执行基于模板类型的查询")
+@router.post("/template-type", summary="执行基于模板类型的查询", response_model=BaseResponse[dict[str, Any]])
 async def execute_template_type_query(
     request: TemplateTypeQueryRequest,
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_EXECUTE)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     执行基于模板类型的查询
 
@@ -73,15 +75,18 @@ async def execute_template_type_query(
     - 批量查询和对比的场景
     - 探索性查询场景
     """
-    return await universal_query_service.execute_template_type_query(request, operation_context)
+    result = await universal_query_service.execute_template_type_query(request, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.post("/template/{template_id}/commands/preview", summary="预览模板命令")
+@router.post(
+    "/template/{template_id}/commands/preview", summary="预览模板命令", response_model=BaseResponse[dict[str, Any]]
+)
 async def get_template_commands_preview(
     template_id: UUID,
     request: TemplateCommandsPreviewRequest,
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_READ)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     预览模板命令（不执行，仅显示命令内容）
 
@@ -100,15 +105,18 @@ async def get_template_commands_preview(
     """
     # 更新请求中的template_id以确保一致性
     request.template_id = template_id
-    return await universal_query_service.get_template_commands_preview(request, operation_context)
+    result = await universal_query_service.get_template_commands_preview(request, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.post("/template/{template_id}/parameters/validate", summary="验证模板参数")
+@router.post(
+    "/template/{template_id}/parameters/validate", summary="验证模板参数", response_model=BaseResponse[dict[str, Any]]
+)
 async def validate_template_parameters(
     template_id: UUID,
     request: TemplateParametersValidationRequest,
     operation_context: OperationContext = Depends(require_permission(Permissions.QUERY_TEMPLATE_READ)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     验证模板参数完整性
 
@@ -127,13 +135,14 @@ async def validate_template_parameters(
     """
     # 更新请求中的template_id以确保一致性
     request.template_id = template_id
-    return await universal_query_service.validate_template_parameters(request, operation_context)
+    result = await universal_query_service.validate_template_parameters(request, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.get("/stats", summary="获取查询引擎统计信息")
+@router.get("/stats", summary="获取查询引擎统计信息", response_model=BaseResponse[dict[str, Any]])
 async def get_query_engine_stats(
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_ACCESS)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     获取查询引擎统计信息
 
@@ -150,13 +159,14 @@ async def get_query_engine_stats(
     - 性能分析和优化
     - 问题诊断和排查
     """
-    return await universal_query_service.get_query_engine_stats(operation_context)
+    result = await universal_query_service.get_query_engine_stats(operation_context)
+    return BaseResponse(data=result)
 
 
-@router.get("/health", summary="查询引擎健康检查")
+@router.get("/health", summary="查询引擎健康检查", response_model=BaseResponse[dict[str, Any]])
 async def get_query_engine_health(
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_ACCESS)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     查询引擎健康检查
 
@@ -173,18 +183,19 @@ async def get_query_engine_health(
     - 负载均衡健康检查
     - 自动化运维检查
     """
-    return await universal_query_service.get_query_engine_health(operation_context)
+    result = await universal_query_service.get_query_engine_health(operation_context)
+    return BaseResponse(data=result)
 
 
 # ===== 便捷查询接口 =====
 
 
-@router.post("/mac", summary="MAC地址查询（便捷接口）")
+@router.post("/mac", summary="MAC地址查询（便捷接口）", response_model=BaseResponse[dict[str, Any]])
 async def execute_mac_query(
     device_ids: list[UUID],
     mac_address: str,
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_MAC)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     MAC地址查询（便捷接口）
 
@@ -201,15 +212,16 @@ async def execute_mac_query(
     - 网络故障排查
     - 终端位置查询
     """
-    return await universal_query_service.execute_mac_query(device_ids, mac_address, operation_context)
+    result = await universal_query_service.execute_mac_query(device_ids, mac_address, operation_context)
+    return BaseResponse(data=result)
 
 
-@router.post("/interface-status", summary="接口状态查询（便捷接口）")
+@router.post("/interface-status", summary="接口状态查询（便捷接口）", response_model=BaseResponse[dict[str, Any]])
 async def execute_interface_status_query(
     device_ids: list[UUID],
     interface_pattern: str | None = None,
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_INTERFACE)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     接口状态查询（便捷接口）
 
@@ -226,17 +238,18 @@ async def execute_interface_status_query(
     - 网络连通性验证
     - 接口利用率分析
     """
-    return await universal_query_service.execute_interface_status_query(
+    result = await universal_query_service.execute_interface_status_query(
         device_ids, operation_context, interface_pattern
     )
+    return BaseResponse(data=result)
 
 
-@router.post("/config", summary="配置显示查询（便捷接口）")
+@router.post("/config", summary="配置显示查询（便捷接口）", response_model=BaseResponse[dict[str, Any]])
 async def execute_config_show_query(
     device_ids: list[UUID],
     config_section: str | None = None,
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_CUSTOM)),
-) -> dict[str, Any]:
+) -> BaseResponse[dict[str, Any]]:
     """
     配置显示查询（便捷接口）
 
@@ -253,4 +266,5 @@ async def execute_config_show_query(
     - 配置合规性验证
     - 配置备份和对比
     """
-    return await universal_query_service.execute_config_show_query(device_ids, operation_context, config_section)
+    result = await universal_query_service.execute_config_show_query(device_ids, operation_context, config_section)
+    return BaseResponse(data=result)

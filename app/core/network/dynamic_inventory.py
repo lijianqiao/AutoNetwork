@@ -23,7 +23,7 @@ class DynamicInventoryBuilder:
         from app.dao.device import DeviceDAO
         from app.dao.region import RegionDAO
         from app.dao.vendor import VendorDAO
-        
+
         self.device_dao = DeviceDAO()
         self.vendor_dao = VendorDAO()
         self.region_dao = RegionDAO()

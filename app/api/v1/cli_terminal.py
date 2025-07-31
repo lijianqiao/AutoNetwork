@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from app.api.v1.permissions import Permissions
 from app.core.exceptions import BusinessException
 from app.core.permissions.simple_decorators import OperationContext, require_permission
+from app.schemas.base import BaseResponse, SuccessResponse
 from app.schemas.cli import DeviceConnectionConfig, PlatformInfo, SessionInfo, SessionStats, ValidationResult
 from app.services.cli_session import CLISessionService
 from app.utils.deps import get_cli_service
@@ -232,7 +233,7 @@ async def connect_manual_terminal(
 
 
 # REST API端点
-@router.get("/sessions", response_model=list[SessionInfo], summary="获取当前用户的所有CLI会话")
+@router.get("/sessions", response_model=BaseResponse[list[SessionInfo]], summary="获取当前用户的所有CLI会话")
 async def get_user_sessions(
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
     cli_service: CLISessionService = Depends(get_cli_service),
@@ -240,13 +241,13 @@ async def get_user_sessions(
     """获取当前用户的所有CLI会话"""
     try:
         sessions = await cli_service.get_user_sessions(operation_context)
-        return sessions
+        return BaseResponse(data=sessions, message="获取CLI会话成功")
     except Exception as e:
         logger.error(f"获取用户CLI会话失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取会话失败: {e}") from e
 
 
-@router.get("/sessions/all", response_model=list[SessionInfo], summary="获取所有CLI会话（管理员功能）")
+@router.get("/sessions/all", response_model=BaseResponse[list[SessionInfo]], summary="获取所有CLI会话（管理员功能）")
 async def get_all_sessions(
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_EXECUTE)),  # 需要更高权限
     cli_service: CLISessionService = Depends(get_cli_service),
@@ -254,13 +255,13 @@ async def get_all_sessions(
     """获取所有CLI会话（管理员功能）"""
     try:
         sessions = await cli_service.get_all_sessions(operation_context)
-        return sessions
+        return BaseResponse(data=sessions, message="获取所有CLI会话成功")
     except Exception as e:
         logger.error(f"获取所有CLI会话失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取会话失败: {e}") from e
 
 
-@router.get("/sessions/stats", response_model=SessionStats, summary="获取CLI会话统计信息")
+@router.get("/sessions/stats", response_model=BaseResponse[SessionStats], summary="获取CLI会话统计信息")
 async def get_session_stats(
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
     cli_service: CLISessionService = Depends(get_cli_service),
@@ -268,13 +269,13 @@ async def get_session_stats(
     """获取CLI会话统计信息"""
     try:
         stats = await cli_service.get_session_stats()
-        return stats
+        return BaseResponse(data=stats, message="获取CLI会话统计成功")
     except Exception as e:
         logger.error(f"获取CLI会话统计失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取统计失败: {e}") from e
 
 
-@router.delete("/sessions/{session_id}", summary="关闭指定的CLI会话")
+@router.delete("/sessions/{session_id}", response_model=SuccessResponse, summary="关闭指定的CLI会话")
 async def close_session(
     session_id: str,
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
@@ -285,7 +286,7 @@ async def close_session(
         success = await cli_service.close_session(session_id, operation_context)
         if not success:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="会话不存在")
-        return {"message": "会话已关闭", "session_id": session_id}
+        return SuccessResponse(message=f"会话 {session_id} 已关闭")
     except BusinessException as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:
@@ -293,7 +294,7 @@ async def close_session(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"关闭会话失败: {e}") from e
 
 
-@router.get("/platforms", response_model=list[PlatformInfo], summary="获取支持的设备平台列表")
+@router.get("/platforms", response_model=BaseResponse[list[PlatformInfo]], summary="获取支持的设备平台列表")
 async def get_supported_platforms(
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
     cli_service: CLISessionService = Depends(get_cli_service),
@@ -301,13 +302,13 @@ async def get_supported_platforms(
     """获取支持的设备平台列表"""
     try:
         platforms = await cli_service.get_supported_platforms()
-        return platforms
+        return BaseResponse(data=platforms, message="获取支持平台列表成功")
     except Exception as e:
         logger.error(f"获取支持平台失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取平台失败: {e}") from e
 
 
-@router.post("/validate-config", response_model=ValidationResult, summary="验证设备连接配置")
+@router.post("/validate-config", response_model=BaseResponse[ValidationResult], summary="验证设备连接配置")
 async def validate_device_config(
     config: DeviceConnectionConfig,
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
@@ -318,13 +319,13 @@ async def validate_device_config(
         result = await cli_service.validate_device_connection(
             device_config=config.dict(), operation_context=operation_context
         )
-        return result
+        return BaseResponse(data=result, message="设备配置验证完成")
     except Exception as e:
         logger.error(f"验证设备配置失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"验证失败: {e}") from e
 
 
-@router.get("/sessions/{session_id}", response_model=SessionInfo, summary="获取指定会话的详细信息")
+@router.get("/sessions/{session_id}", response_model=BaseResponse[SessionInfo], summary="获取指定会话的详细信息")
 async def get_session_info(
     session_id: str,
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
@@ -340,7 +341,7 @@ async def get_session_info(
         if session.user_id != operation_context.user.id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="没有权限访问此会话")
 
-        return session.get_session_info()
+        return BaseResponse(data=session.get_session_info(), message="获取会话信息成功")
     except HTTPException:
         raise
     except Exception as e:
@@ -348,7 +349,7 @@ async def get_session_info(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取会话信息失败: {e}") from e
 
 
-@router.post("/sessions/{session_id}/reconnect", summary="重连指定的CLI会话")
+@router.post("/sessions/{session_id}/reconnect", response_model=SuccessResponse, summary="重连指定的CLI会话")
 async def reconnect_session(
     session_id: str,
     dynamic_password: str | None = None,
@@ -364,7 +365,7 @@ async def reconnect_session(
         if not success:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="重连失败")
 
-        return {"message": "重连成功", "session_id": session_id}
+        return SuccessResponse(message=f"会话 {session_id} 重连成功")
     except BusinessException as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
     except Exception as e:

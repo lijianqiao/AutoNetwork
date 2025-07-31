@@ -84,6 +84,48 @@ class UserDetailResponseWrapper(BaseResponse[UserDetailResponse]):
     pass
 
 
+class UserCreateResponse(BaseResponse[UserResponse]):
+    """创建用户响应"""
+
+    pass
+
+
+class UserUpdateResponse(BaseResponse[UserResponse]):
+    """更新用户响应"""
+
+    pass
+
+
+class UserDeleteResponse(BaseResponse[dict]):
+    """删除用户响应"""
+
+    pass
+
+
+class UserListResponseWrapper(BaseResponse[list[UserResponse]]):
+    """用户列表响应包装"""
+
+    pass
+
+
+class UserAssignRolesResponse(BaseResponse[UserDetailResponse]):
+    """分配角色响应"""
+
+    pass
+
+
+class UserAssignPermissionsResponse(BaseResponse[UserDetailResponse]):
+    """分配权限响应"""
+
+    pass
+
+
+class UserStatusUpdateResponse(BaseResponse[UserResponse]):
+    """更新用户状态响应"""
+
+    pass
+
+
 class UserAssignRolesRequest(BaseModel):
     """为用户分配角色请求"""
 
