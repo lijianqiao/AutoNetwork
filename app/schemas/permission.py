@@ -18,6 +18,7 @@ class PermissionBase(ORMBase):
     permission_code: str = Field(description="权限编码", min_length=2, max_length=100)
     permission_type: str = Field(description="权限类型（如: module, button）", max_length=50)
     description: str | None = Field(default=None, description="权限描述", max_length=200)
+    is_active: bool = Field(default=True, description="是否激活")
 
 
 class PermissionCreateRequest(BaseModel):
