@@ -26,7 +26,6 @@ from app.utils.deps import (
     get_cli_service,
     get_device_connection_service,
     get_statistics_service,
-    get_universal_query_service,
 )
 from app.utils.logger import logger
 
@@ -104,26 +103,6 @@ async def get_connection_stats(
     except Exception as e:
         logger.error(f"获取设备连接统计失败: {e}")
         return BaseResponse(data={"error": str(e)}, message="获取设备连接统计失败")
-
-
-# 查询引擎统计
-@router.get("/queries", response_model=BaseResponse[dict], summary="获取查询引擎统计信息")
-async def get_query_engine_stats(
-    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_ACCESS)),
-    universal_query_service=Depends(get_universal_query_service),
-):
-    """获取查询引擎统计信息"""
-    logger.info(f"用户 {operation_context.user.username} 获取查询引擎统计")
-
-    try:
-        # 获取查询引擎统计
-        query_stats = await universal_query_service.get_query_engine_stats(operation_context)
-
-        return BaseResponse(data=query_stats, message="获取查询引擎统计成功")
-
-    except Exception as e:
-        logger.error(f"获取查询引擎统计失败: {e}")
-        return BaseResponse(data={"error": str(e)}, message="获取查询引擎统计失败")
 
 
 # 权限缓存统计

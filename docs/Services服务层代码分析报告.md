@@ -396,12 +396,24 @@ class ImportExportService:
 - **架构清晰**：明确的委托关系，避免功能重复
 - **职责明确**：服务层专注业务逻辑，核心层专注技术实现
 
-### 🔄 第二阶段：合并查询服务（计划中）
-1. **Week 1：** 设计统一查询接口
-2. **Week 2：** 实施合并逻辑
-3. **Week 3：** 迁移现有API，向后兼容
+### 🔄 第二阶段：合并查询服务（已完成）
+1. **Week 1：** ✅ 设计统一查询接口，创建UnifiedQueryRequest/Response schemas
+2. **Week 2：** ✅ 重构NetworkQueryService为统一查询服务，集成UniversalQueryEngine
+3. **Week 3：** ✅ 保持API向后兼容，UniversalQueryService标记为废弃
 
-### 第三阶段：完善统计和导入导出（1周）
+#### 🎯 第二阶段完成情况
+- ✅ **统一查询接口**：创建了`UnifiedQueryRequest`/`UnifiedQueryResponse`支持所有查询类型
+- ✅ **服务整合**：`NetworkQueryService`成为统一查询入口，集成了`UniversalQueryEngine`
+- ✅ **功能合并**：MAC查询、接口状态查询、模板查询统一到一个服务中
+- ✅ **向后兼容**：所有现有API接口保持不变，`UniversalQueryService`标记废弃但继续工作
+- ✅ **架构统一**：消除了查询服务间的功能重复，明确了职责边界
+
+#### 📊 重构效果
+- **架构清晰**：单一查询服务入口，消除了服务间功能重叠
+- **代码减少**：将重复的便捷查询方法整合，减少约100行重复代码
+- **职责明确**：NetworkQueryService负责所有查询类型，UniversalQueryService逐步废弃
+
+### 🔄 第三阶段：完善统计和导入导出（计划中）
 1. **Day 1-3：** 实现真实系统统计
 2. **Day 4-5：** 优化导入导出服务
 

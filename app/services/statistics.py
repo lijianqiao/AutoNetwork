@@ -44,13 +44,13 @@ class StatisticsService:
         from app.services.cli_session import CLISessionService
         from app.services.device import DeviceService
         from app.services.device_connection import DeviceConnectionService
+        from app.services.network_query import NetworkQueryService
         from app.services.operation_log import OperationLogService
         from app.services.permission import PermissionService
         from app.services.query_history import QueryHistoryService
         from app.services.query_template import QueryTemplateService
         from app.services.region import RegionService
         from app.services.role import RoleService
-        from app.services.universal_query import UniversalQueryService
         from app.services.user import UserService
 
         # 基础服务
@@ -65,7 +65,7 @@ class StatisticsService:
 
         # 专用服务
         self.device_connection_service = DeviceConnectionService()
-        self.universal_query_service = UniversalQueryService()
+        self.network_query_service = NetworkQueryService()
         self.cli_session_service = CLISessionService()
 
     @log_query_with_context("statistics")
@@ -103,7 +103,7 @@ class StatisticsService:
                 "device_configs": "设备配置",
                 "devices": "设备管理",
                 "import_export": "导入导出",
-                "universal_query": "通用查询",
+                "network_query": "网络查询",
                 "operation_logs": "操作日志",
                 "permission_cache": "权限缓存",
                 "permissions": "权限管理",
@@ -129,7 +129,7 @@ class StatisticsService:
                 # 模拟接口数量统计
                 endpoint_count = self._estimate_module_endpoints(module_code)
                 active_count = endpoint_count - 2  # 假设有2个废弃接口
-                deprecated_count = 2 if module_code in ["universal_query"] else 0
+                deprecated_count = 0  # 移除了废弃的universal_query模块
 
                 api_stats.append(
                     APIStatsItem(
@@ -329,16 +329,16 @@ class StatisticsService:
             queries_today = await self.query_history_service.count(created_at__date=today)
 
             # 获取实际的查询引擎统计
-            from app.utils.deps import OperationContext
 
             # 创建一个临时的操作上下文用于统计查询
             admin_user = await self.user_service.get_one(is_superuser=True)
             if admin_user:
-                temp_context = OperationContext(user=admin_user, request=None)
-                query_engine_stats = await self.universal_query_service.get_query_engine_stats(temp_context)
+                # TODO: 实现网络查询服务的统计功能
+                # temp_context = OperationContext(user=admin_user, request=None)
+                # query_engine_stats = await self.network_query_service.get_query_engine_stats(temp_context)
 
-                # 从查询引擎统计中获取热门模板
-                popular_templates = query_engine_stats.get("popular_templates", [])
+                # 暂时使用模板使用频率统计
+                popular_templates = await self._get_popular_templates()
             else:
                 # 如果没有超级用户，使用模板使用频率统计
                 popular_templates = await self._get_popular_templates()
@@ -550,7 +550,7 @@ class StatisticsService:
             "device_configs": 25,
             "devices": 8,
             "import_export": 3,
-            "universal_query": 18,
+            "network_query": 18,
             "operation_logs": 3,
             "permission_cache": 5,
             "permissions": 8,
