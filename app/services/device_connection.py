@@ -3,7 +3,7 @@
 @Email: lijianqiao2906@live.com
 @FileName: device_connection.py
 @DateTime: 2025/07/25 20:59:51
-@Docs: 设备连接管理服务层 - 集成连接管理器、连接池和认证测试器，提供统一的设备连接管理服务
+@Docs: 设备连接管理服务层 - 门面模式统一设备连接管理，委托给核心组件并添加业务逻辑
 """
 
 from datetime import datetime
@@ -22,11 +22,6 @@ from app.core.network.exceptions import (
     DeviceConnectionException,
     NetworkException,
 )
-from app.core.network.interfaces import (
-    IAuthenticationProvider,
-    IConnectionProvider,
-    IDeviceDAO,
-)
 from app.dao.device import DeviceDAO
 from app.services.authentication import AuthenticationManager
 from app.utils.encryption import encrypt_text
@@ -34,22 +29,23 @@ from app.utils.logger import logger
 
 
 class DeviceConnectionService:
-    """设备连接管理服务"""
+    """设备连接管理服务门面 - 委托给核心组件，添加业务逻辑"""
 
-    def __init__(
-        self,
-        device_dao: IDeviceDAO | None = None,
-        auth_provider: IAuthenticationProvider | None = None,
-        connection_provider: IConnectionProvider | None = None,
-    ):
-        self.device_dao = device_dao or DeviceDAO()
-        self.auth_provider = auth_provider or AuthenticationManager()
-        self.connection_provider = connection_provider or DeviceConnectionManager(auth_provider=self.auth_provider)
+    def __init__(self):
+        """初始化服务门面，依赖核心组件"""
+        # 核心组件依赖
+        self.device_dao = DeviceDAO()
+        self.auth_manager = AuthenticationManager()
+        self.connection_manager = DeviceConnectionManager(auth_provider=self.auth_manager)
+
+        # 认证测试器 - 核心功能委托对象
         self.auth_tester = AuthenticationTester(
-            auth_provider=self.auth_provider,
-            connection_provider=self.connection_provider,
+            auth_provider=self.auth_manager,
+            connection_provider=self.connection_manager,
             device_dao=self.device_dao,
         )
+
+        # 连接池实例
         self._connection_pool: ConnectionPool | None = None
 
     async def get_connection_pool(self) -> ConnectionPool:
@@ -59,7 +55,7 @@ class DeviceConnectionService:
         return self._connection_pool
 
     async def test_device_connection(self, device_id: UUID, dynamic_password: str | None = None) -> dict[str, Any]:
-        """测试单个设备连接"""
+        """测试单个设备连接 - 委托给AuthenticationTester并添加业务逻辑"""
         logger.info(f"开始测试设备连接: {device_id}")
 
         try:
@@ -71,24 +67,15 @@ class DeviceConnectionService:
                     detail={"device_id": str(device_id)},
                 )
 
-            # 执行连接测试
+            # 委托给AuthenticationTester执行核心测试逻辑
             result = await self.auth_tester.test_single_device(device, dynamic_password)
 
-            # 更新设备最后连接时间
+            # 添加服务层业务逻辑：更新设备最后连接时间
             if result.success:
-                await self.device_dao.update_last_connected(device_id)
+                await self._update_device_status(device_id, "online")
+                await self._record_connection_log(device_id, result)
 
-            return {
-                "device_id": str(device_id),
-                "hostname": device.hostname,
-                "ip_address": device.ip_address,
-                "success": result.success,
-                "execution_time": result.execution_time,
-                "error_message": result.error_message,
-                "platform": result.platform,
-                "auth_type": result.auth_type,
-                "tested_at": result.tested_at.isoformat(),
-            }
+            return self._format_connection_result(device, result)
 
         except Exception as e:
             logger.error(f"测试设备连接失败: {e}")
@@ -106,19 +93,18 @@ class DeviceConnectionService:
         dynamic_passwords: dict[UUID, str] | None = None,
         max_concurrent: int = 10,
     ) -> dict[str, Any]:
-        """批量测试设备连接"""
+        """批量测试设备连接 - 委托给AuthenticationTester并添加业务逻辑"""
         logger.info(f"开始批量测试设备连接，设备数量: {len(device_ids)}")
 
         try:
-            # 执行批量测试
+            # 委托给AuthenticationTester执行核心批量测试逻辑
             batch_result = await self.auth_tester.test_batch_devices(device_ids, dynamic_passwords, max_concurrent)
 
-            # 更新成功连接的设备最后连接时间
+            # 添加服务层业务逻辑：更新成功连接的设备状态和日志
             successful_device_ids = [result.device_id for result in batch_result.results if result.success]
-
             if successful_device_ids:
-                for device_id in successful_device_ids:
-                    await self.device_dao.update_last_connected(device_id)
+                await self._batch_update_device_status(successful_device_ids, "online")
+                await self._batch_record_connection_logs(batch_result.results)
 
             return batch_result.to_dict()
 
@@ -158,7 +144,7 @@ class DeviceConnectionService:
     async def execute_command(
         self, device_id: UUID, command: str, dynamic_password: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
-        """在设备上执行命令"""
+        """在设备上执行命令 - 委托给ConnectionManager"""
         logger.info(f"在设备 {device_id} 上执行命令: {command}")
 
         try:
@@ -166,8 +152,8 @@ class DeviceConnectionService:
             if not device:
                 raise BusinessException(f"设备不存在: {device_id}")
 
-            # 使用连接提供者执行命令
-            result = await self.connection_provider.execute_device_command(device, command, dynamic_password, timeout)
+            # 委托给ConnectionManager执行命令
+            result = await self.connection_manager.execute_device_command(device, command, dynamic_password, timeout)
 
             return {
                 "device_id": str(device_id),
@@ -192,9 +178,9 @@ class DeviceConnectionService:
             }
 
     async def get_device_credentials(self, device_id: UUID, dynamic_password: str | None = None) -> dict[str, Any]:
-        """获取设备认证凭据"""
+        """获取设备认证凭据 - 委托给AuthenticationManager"""
         try:
-            credentials = await self.auth_provider.get_device_credentials(device_id, dynamic_password)
+            credentials = await self.auth_manager.get_device_credentials(device_id, dynamic_password)
 
             return {
                 "device_id": str(device_id),
@@ -238,9 +224,9 @@ class DeviceConnectionService:
             raise NetworkException(f"获取连接池统计信息失败: {e}") from e
 
     async def get_connection_manager_stats(self) -> dict[str, Any]:
-        """获取连接管理器统计信息"""
+        """获取连接管理器统计信息 - 委托给ConnectionManager"""
         try:
-            return await self.connection_provider.get_connection_stats()
+            return await self.connection_manager.get_connection_stats()
         except Exception as e:
             logger.error(f"获取连接管理器统计信息失败: {e}")
             raise NetworkException(f"获取连接管理器统计信息失败: {e}") from e
@@ -277,14 +263,14 @@ class DeviceConnectionService:
             raise NetworkException(f"清理空闲连接失败: {e}") from e
 
     async def close_device_connection(self, device_id: UUID) -> dict[str, Any]:
-        """关闭指定设备连接"""
+        """关闭指定设备连接 - 委托给连接池和连接管理器"""
         try:
             # 从连接池中移除
             pool = await self.get_connection_pool()
             pool_removed = await pool.remove_connection(device_id)
 
-            # 从连接提供者中移除
-            manager_removed = await self.connection_provider.close_connection(device_id)
+            # 从连接管理器中移除
+            manager_removed = await self.connection_manager.close_connection(device_id)
 
             logger.info(f"关闭设备连接: {device_id}")
 
@@ -347,7 +333,7 @@ class DeviceConnectionService:
     async def validate_device_credentials(
         self, device_id: UUID, username: str, password: str, ssh_port: int = 22
     ) -> dict[str, Any]:
-        """验证设备认证凭据"""
+        """验证设备认证凭据 - 委托给AuthenticationTester"""
         try:
             result = await self.auth_tester.validate_credentials(device_id, username, password, ssh_port)
 
@@ -379,7 +365,7 @@ class DeviceConnectionService:
         is_active: bool = True,
         max_concurrent: int = 10,
     ) -> dict[str, Any]:
-        """根据条件批量测试设备"""
+        """根据条件批量测试设备 - 委托给AuthenticationTester并添加业务逻辑"""
         try:
             batch_result = await self.auth_tester.test_devices_by_criteria(
                 vendor_id=vendor_id,
@@ -390,12 +376,11 @@ class DeviceConnectionService:
                 max_concurrent=max_concurrent,
             )
 
-            # 更新成功连接的设备最后连接时间
+            # 添加服务层业务逻辑：更新成功连接的设备状态和日志
             successful_device_ids = [result.device_id for result in batch_result.results if result.success]
-
             if successful_device_ids:
-                for device_id in successful_device_ids:
-                    await self.device_dao.update_last_connected(device_id)
+                await self._batch_update_device_status(successful_device_ids, "online")
+                await self._batch_record_connection_logs(batch_result.results)
 
             return batch_result.to_dict()
 
@@ -410,11 +395,11 @@ class DeviceConnectionService:
             ) from e
 
     def clear_dynamic_password_cache(self, device_id: UUID | None = None) -> dict[str, Any]:
-        """清除动态密码缓存"""
+        """清除动态密码缓存 - 委托给AuthenticationManager"""
         try:
-            cache_count_before = self.auth_provider.get_cached_password_count()
-            self.auth_provider.clear_dynamic_password_cache(device_id)
-            cache_count_after = self.auth_provider.get_cached_password_count()
+            cache_count_before = self.auth_manager.get_cached_password_count()
+            self.auth_manager.clear_dynamic_password_cache(device_id)
+            cache_count_after = self.auth_manager.get_cached_password_count()
 
             cleared_count = cache_count_before - cache_count_after
 
@@ -433,9 +418,9 @@ class DeviceConnectionService:
             raise NetworkException(f"清除动态密码缓存失败: {e}") from e
 
     def get_cached_password_info(self) -> dict[str, Any]:
-        """获取缓存密码信息"""
+        """获取缓存密码信息 - 委托给AuthenticationManager"""
         try:
-            cache_count = self.auth_provider.get_cached_password_count()
+            cache_count = self.auth_manager.get_cached_password_count()
 
             return {
                 "cached_password_count": cache_count,
@@ -476,3 +461,53 @@ class DeviceConnectionService:
         except Exception as e:
             logger.error(f"获取测试统计信息失败: {e}")
             raise NetworkException(f"获取测试统计信息失败: {e}") from e
+
+    # ==================== 私有辅助方法 - 服务层业务逻辑 ====================
+
+    async def _update_device_status(self, device_id: UUID, status: str) -> None:
+        """更新设备状态"""
+        try:
+            await self.device_dao.update_last_connected(device_id)
+            logger.debug(f"更新设备状态: {device_id} -> {status}")
+        except Exception as e:
+            logger.warning(f"更新设备状态失败: {device_id}, {e}")
+
+    async def _record_connection_log(self, device_id: UUID, result) -> None:
+        """记录连接日志"""
+        try:
+            # TODO: 集成操作日志服务记录连接操作
+            logger.debug(f"记录连接日志: {device_id}, 成功={result.success}")
+        except Exception as e:
+            logger.warning(f"记录连接日志失败: {device_id}, {e}")
+
+    def _format_connection_result(self, device, result) -> dict[str, Any]:
+        """格式化连接测试结果"""
+        return {
+            "device_id": str(device.id),
+            "hostname": device.hostname,
+            "ip_address": device.ip_address,
+            "success": result.success,
+            "execution_time": result.execution_time,
+            "error_message": result.error_message,
+            "platform": result.platform,
+            "auth_type": result.auth_type,
+            "tested_at": result.tested_at.isoformat(),
+        }
+
+    async def _batch_update_device_status(self, device_ids: list[UUID], status: str) -> None:
+        """批量更新设备状态"""
+        try:
+            for device_id in device_ids:
+                await self.device_dao.update_last_connected(device_id)
+            logger.debug(f"批量更新设备状态: {len(device_ids)}个设备 -> {status}")
+        except Exception as e:
+            logger.warning(f"批量更新设备状态失败: {e}")
+
+    async def _batch_record_connection_logs(self, results: list) -> None:
+        """批量记录连接日志"""
+        try:
+            # TODO: 集成操作日志服务批量记录连接操作
+            success_count = sum(1 for result in results if result.success)
+            logger.debug(f"批量记录连接日志: {len(results)}个结果, 成功={success_count}")
+        except Exception as e:
+            logger.warning(f"批量记录连接日志失败: {e}")
