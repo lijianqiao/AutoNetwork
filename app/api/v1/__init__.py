@@ -53,12 +53,12 @@ api_router.include_router(regions.router, tags=["基地管理"])
 api_router.include_router(vendors.router, tags=["厂商管理"])
 api_router.include_router(vendor_commands.router, tags=["厂商命令管理"])
 api_router.include_router(query_templates.router, tags=["查询模板管理"])
-api_router.include_router(network_query.router, tags=["网络查询（统一）"])
+api_router.include_router(network_query.router, tags=["网络查询"])
 api_router.include_router(query_history.router, tags=["查询历史管理"])
 api_router.include_router(import_export.router, tags=["导入导出"])
 api_router.include_router(cli_terminal.router, tags=["CLI终端"])
 api_router.include_router(web_routes.router, tags=["Web页面"])
-api_router.include_router(statistics.router, tags=["统计模块"])
+api_router.include_router(statistics.router, tags=["系统统计"])
 
 # 保持向后兼容
 v1_router = api_router

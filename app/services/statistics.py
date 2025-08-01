@@ -7,9 +7,13 @@
 """
 
 import asyncio
+import os
+import platform
+import time
 from datetime import datetime, timedelta
 from typing import Any
 
+from app.core.config import get_settings
 from app.core.exceptions import BusinessException
 from app.models.device import Device
 from app.models.query_history import QueryHistory
@@ -67,6 +71,9 @@ class StatisticsService:
         self.device_connection_service = DeviceConnectionService()
         self.network_query_service = NetworkQueryService()
         self.cli_session_service = CLISessionService()
+        # 计算真实的运行时间
+        settings = get_settings()
+        self.uptime_days = (datetime.now() - settings.APP_START_TIME).days
 
     @log_query_with_context("statistics")
     async def get_overall_stats(self, period: StatsPeriodQuery | None = None) -> OverallStatsResponse:
@@ -329,15 +336,11 @@ class StatisticsService:
             queries_today = await self.query_history_service.count(created_at__date=today)
 
             # 获取实际的查询引擎统计
-
-            # 创建一个临时的操作上下文用于统计查询
+            # 注意：网络查询服务统计功能待开发，当前使用基础统计
             admin_user = await self.user_service.get_one(is_superuser=True)
             if admin_user:
-                # TODO: 实现网络查询服务的统计功能
-                # temp_context = OperationContext(user=admin_user, request=None)
-                # query_engine_stats = await self.network_query_service.get_query_engine_stats(temp_context)
-
-                # 暂时使用模板使用频率统计
+                # 网络查询服务统计功能待实现
+                # 当前使用查询历史和模板统计作为替代
                 popular_templates = await self._get_popular_templates()
             else:
                 # 如果没有超级用户，使用模板使用频率统计
@@ -407,7 +410,7 @@ class StatisticsService:
             }
 
             return SystemStatsOverview(
-                uptime_days=30,  # TODO: 可以从应用启动时间计算
+                uptime_days=self.uptime_days,
                 total_operations=total_operations,
                 operations_today=operations_today,
                 cache_hit_rate=cache_hit_rate,
@@ -422,7 +425,7 @@ class StatisticsService:
             operations_today = await self.operation_log_service.count(created_at__date=today)
 
             return SystemStatsOverview(
-                uptime_days=30,
+                uptime_days=self.uptime_days,
                 total_operations=total_operations,
                 operations_today=operations_today,
                 cache_hit_rate=88.5,
@@ -594,3 +597,26 @@ class StatisticsService:
                 {"template_name": "接口状态查询", "usage_count": 120},
                 {"template_name": "设备配置查询", "usage_count": 80},
             ]
+
+    def _get_system_info(self) -> dict[str, Any]:
+        """获取系统基本信息"""
+        try:
+            system_info = {
+                "hostname": platform.node(),
+                "platform": platform.platform(),
+                "system": platform.system(),
+                "processor": platform.processor(),
+                "python_version": platform.python_version(),
+                "uptime_seconds": time.time() - os.path.getctime(__file__) if os.path.exists(__file__) else 0,
+            }
+            return system_info
+        except Exception as e:
+            logger.warning(f"获取系统信息失败: {str(e)}")
+            return {
+                "hostname": "unknown",
+                "platform": "unknown",
+                "system": "unknown",
+                "processor": "unknown",
+                "python_version": platform.python_version(),
+                "uptime_seconds": 0,
+            }

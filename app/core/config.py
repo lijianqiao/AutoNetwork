@@ -7,6 +7,7 @@
 @Docs: 应用程序配置管理
 """
 
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,7 @@ class Settings(BaseSettings):
     APP_DESCRIPTION: str = Field(default="基于FastAPI的网络设备监控系统")
     API_PREFIX: str = Field(default="/api")
     DEBUG: bool = Field(default=False)
+    APP_START_TIME: datetime = Field(default_factory=datetime.now, description="应用启动时间")
 
     # 服务器配置
     HOST: str = Field(default="127.0.0.1")
