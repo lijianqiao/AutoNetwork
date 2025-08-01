@@ -108,6 +108,12 @@ def get_network_query_service():
     return NetworkQueryService()
 
 
+def get_universal_query_service():
+    from app.services.universal_query import UniversalQueryService
+
+    return UniversalQueryService()
+
+
 def get_device_connection_service():
     from app.services.device_connection import DeviceConnectionService
 

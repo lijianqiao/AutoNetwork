@@ -6,6 +6,8 @@
 @Docs: 统一统计模块API - 所有系统统计功能的入口
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
 
 from app.core.permissions.simple_decorators import Permissions, require_permission
@@ -19,7 +21,13 @@ from app.schemas.statistics import (
     StatsPeriodQuery,
 )
 from app.services.statistics import StatisticsService
-from app.utils.deps import OperationContext, get_statistics_service
+from app.utils.deps import (
+    OperationContext,
+    get_cli_service,
+    get_device_connection_service,
+    get_statistics_service,
+    get_universal_query_service,
+)
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/stats", tags=["系统统计"])
@@ -71,22 +79,51 @@ async def get_dashboard_stats(
 @router.get("/connections", response_model=BaseResponse[dict], summary="获取设备连接统计信息")
 async def get_connection_stats(
     operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_READ)),
+    device_connection_service=Depends(get_device_connection_service),
 ):
     """获取设备连接统计信息（包括连接池和管理器统计）"""
     logger.info(f"用户 {operation_context.user.username} 获取设备连接统计")
-    # TODO: 实现统一的连接统计逻辑
-    return BaseResponse(data={"message": "连接统计功能正在开发中"}, message="获取连接统计成功")
+
+    try:
+        # 获取连接池统计
+        pool_stats = await device_connection_service.get_connection_pool_stats()
+
+        # 获取连接管理器统计
+        manager_stats = await device_connection_service.get_connection_manager_stats()
+
+        # 合并统计数据
+        connection_stats = {
+            "pool_stats": pool_stats,
+            "manager_stats": manager_stats,
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),  # 使用当前时间戳
+        }
+
+        logger.info("设备连接统计获取成功")
+        return BaseResponse(data=connection_stats, message="获取设备连接统计成功")
+
+    except Exception as e:
+        logger.error(f"获取设备连接统计失败: {e}")
+        return BaseResponse(data={"error": str(e)}, message="获取设备连接统计失败")
 
 
 # 查询引擎统计
 @router.get("/queries", response_model=BaseResponse[dict], summary="获取查询引擎统计信息")
 async def get_query_engine_stats(
     operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_ACCESS)),
+    universal_query_service=Depends(get_universal_query_service),
 ):
     """获取查询引擎统计信息"""
     logger.info(f"用户 {operation_context.user.username} 获取查询引擎统计")
-    # TODO: 实现统一的查询引擎统计逻辑
-    return BaseResponse(data={"message": "查询引擎统计功能正在开发中"}, message="获取查询引擎统计成功")
+
+    try:
+        # 获取查询引擎统计
+        query_stats = await universal_query_service.get_query_engine_stats(operation_context)
+
+        return BaseResponse(data=query_stats, message="获取查询引擎统计成功")
+
+    except Exception as e:
+        logger.error(f"获取查询引擎统计失败: {e}")
+        return BaseResponse(data={"error": str(e)}, message="获取查询引擎统计失败")
 
 
 # 权限缓存统计
@@ -96,16 +133,35 @@ async def get_permission_cache_stats(
 ):
     """获取权限缓存统计信息"""
     logger.info(f"用户 {operation_context.user.username} 获取权限缓存统计")
-    # TODO: 实现统一的权限缓存统计逻辑
-    return BaseResponse(data={"message": "权限缓存统计功能正在开发中"}, message="获取权限缓存统计成功")
+
+    from app.utils.permission_cache_utils import get_permission_cache_stats
+
+    try:
+        # 获取权限缓存统计
+        cache_stats = await get_permission_cache_stats()
+
+        return BaseResponse(data=cache_stats, message="获取权限缓存统计成功")
+
+    except Exception as e:
+        logger.error(f"获取权限缓存统计失败: {e}")
+        return BaseResponse(data={"error": str(e)}, message="获取权限缓存统计失败")
 
 
 # CLI会话统计
 @router.get("/cli-sessions", response_model=BaseResponse[dict], summary="获取CLI会话统计信息")
 async def get_cli_session_stats(
     operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
+    cli_service=Depends(get_cli_service),
 ):
     """获取CLI会话统计信息"""
     logger.info(f"用户 {operation_context.user.username} 获取CLI会话统计")
-    # TODO: 实现统一的CLI会话统计逻辑
-    return BaseResponse(data={"message": "CLI会话统计功能正在开发中"}, message="获取CLI会话统计成功")
+
+    try:
+        # 获取CLI会话统计
+        session_stats = await cli_service.get_session_stats()
+
+        return BaseResponse(data=session_stats, message="获取CLI会话统计成功")
+
+    except Exception as e:
+        logger.error(f"获取CLI会话统计失败: {e}")
+        return BaseResponse(data={"error": str(e)}, message="获取CLI会话统计失败")

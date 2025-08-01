@@ -271,7 +271,7 @@ class StatisticsService:
 
         # 今日查询统计
         today = datetime.now().date()
-        queries_today = await QueryHistory.filter(created_at__date=today).count()
+        queries_today = await QueryHistory.filter(created_at=today).count()
 
         # 热门模板（简化实现）
         popular_templates = [
@@ -296,7 +296,7 @@ class StatisticsService:
 
         # 今日操作统计
         today = datetime.now().date()
-        operations_today = await OperationLog.filter(created_at__date=today).count()
+        operations_today = await OperationLog.filter(created_at=today).count()
 
         return SystemStatsOverview(
             uptime_days=30,  # 假设系统运行30天
@@ -384,7 +384,7 @@ class StatisticsService:
         """统计今日新增数量"""
         try:
             today = datetime.now().date()
-            return await model_class.filter(created_at__date=today).count()
+            return await model_class.filter(created_at=today).count()
         except Exception:
             return 0
 
