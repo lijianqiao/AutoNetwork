@@ -80,8 +80,8 @@ class SystemStatsOverview(BaseModel):
     storage_usage: dict[str, Any] = Field(default_factory=dict, description="存储使用情况")
 
 
-class OverallStatsResponse(BaseResponse):
-    """整体统计响应"""
+class OverallStatsData(BaseModel):
+    """整体统计数据"""
 
     user_stats: UserStatsOverview
     device_stats: DeviceStatsOverview
@@ -89,8 +89,14 @@ class OverallStatsResponse(BaseResponse):
     system_stats: SystemStatsOverview
 
 
-class APIStatsResponse(BaseResponse):
-    """API统计响应"""
+class OverallStatsResponse(BaseResponse[OverallStatsData]):
+    """整体统计响应"""
+
+    pass
+
+
+class APIStatsData(BaseModel):
+    """API统计数据"""
 
     total_modules: int = Field(..., description="模块总数")
     total_endpoints: int = Field(..., description="接口总数")
@@ -99,19 +105,37 @@ class APIStatsResponse(BaseResponse):
     api_stats: list[APIStatsItem] = Field(..., description="API统计详情")
 
 
-class ModuleStatsResponse(BaseResponse):
-    """模块统计响应"""
+class APIStatsResponse(BaseResponse[APIStatsData]):
+    """API统计响应"""
+
+    pass
+
+
+class ModuleStatsData(BaseModel):
+    """模块统计数据"""
 
     modules: list[ModuleStatsItem] = Field(..., description="模块统计详情")
 
 
-class DashboardStatsResponse(BaseResponse):
-    """仪表板统计响应"""
+class ModuleStatsResponse(BaseResponse[ModuleStatsData]):
+    """模块统计响应"""
 
-    overall_stats: OverallStatsResponse
-    api_stats: APIStatsResponse
+    pass
+
+
+class DashboardStatsData(BaseModel):
+    """仪表板统计数据"""
+
+    overall_stats: OverallStatsData
+    api_stats: APIStatsData
     recent_activities: list[dict[str, Any]] = Field(default_factory=list, description="最近活动")
     system_alerts: list[dict[str, Any]] = Field(default_factory=list, description="系统警告")
+
+
+class DashboardStatsResponse(BaseResponse[DashboardStatsData]):
+    """仪表板统计响应"""
+
+    pass
 
 
 class StatsPeriodQuery(BaseModel):

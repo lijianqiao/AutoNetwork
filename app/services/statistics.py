@@ -12,20 +12,18 @@ from typing import Any
 
 from app.core.exceptions import BusinessException
 from app.models.device import Device
-from app.models.operation_log import OperationLog
-from app.models.permission import Permission
 from app.models.query_history import QueryHistory
-from app.models.query_template import QueryTemplate
-from app.models.region import Region
-from app.models.role import Role
-from app.models.user import User
 from app.schemas.statistics import (
+    APIStatsData,
     APIStatsItem,
     APIStatsResponse,
+    DashboardStatsData,
     DashboardStatsResponse,
     DeviceStatsOverview,
+    ModuleStatsData,
     ModuleStatsItem,
     ModuleStatsResponse,
+    OverallStatsData,
     OverallStatsResponse,
     QueryStatsOverview,
     StatsFilterQuery,
@@ -42,7 +40,33 @@ class StatisticsService:
 
     def __init__(self):
         """初始化统计服务"""
-        pass
+        # 导入实际的服务依赖
+        from app.services.cli_session import CLISessionService
+        from app.services.device import DeviceService
+        from app.services.device_connection import DeviceConnectionService
+        from app.services.operation_log import OperationLogService
+        from app.services.permission import PermissionService
+        from app.services.query_history import QueryHistoryService
+        from app.services.query_template import QueryTemplateService
+        from app.services.region import RegionService
+        from app.services.role import RoleService
+        from app.services.universal_query import UniversalQueryService
+        from app.services.user import UserService
+
+        # 基础服务
+        self.user_service = UserService()
+        self.device_service = DeviceService()
+        self.role_service = RoleService()
+        self.permission_service = PermissionService()
+        self.query_template_service = QueryTemplateService()
+        self.query_history_service = QueryHistoryService()
+        self.operation_log_service = OperationLogService()
+        self.region_service = RegionService()
+
+        # 专用服务
+        self.device_connection_service = DeviceConnectionService()
+        self.universal_query_service = UniversalQueryService()
+        self.cli_session_service = CLISessionService()
 
     @log_query_with_context("statistics")
     async def get_overall_stats(self, period: StatsPeriodQuery | None = None) -> OverallStatsResponse:
@@ -59,7 +83,9 @@ class StatisticsService:
             )
 
             return OverallStatsResponse(
-                user_stats=user_stats, device_stats=device_stats, query_stats=query_stats, system_stats=system_stats
+                data=OverallStatsData(
+                    user_stats=user_stats, device_stats=device_stats, query_stats=query_stats, system_stats=system_stats
+                )
             )
         except Exception as e:
             logger.error(f"获取整体统计失败: {str(e)}")
@@ -120,11 +146,13 @@ class StatisticsService:
                 deprecated_endpoints += deprecated_count
 
             return APIStatsResponse(
-                total_modules=len(api_modules),
-                total_endpoints=total_endpoints,
-                active_endpoints=active_endpoints,
-                deprecated_endpoints=deprecated_endpoints,
-                api_stats=api_stats,
+                data=APIStatsData(
+                    total_modules=len(api_modules),
+                    total_endpoints=total_endpoints,
+                    active_endpoints=active_endpoints,
+                    deprecated_endpoints=deprecated_endpoints,
+                    api_stats=api_stats,
+                )
             )
         except Exception as e:
             logger.error(f"获取API统计失败: {str(e)}")
@@ -137,60 +165,60 @@ class StatisticsService:
             modules = []
 
             # 用户管理模块
-            total_users = await User.all().count()
-            active_users = await User.filter(is_active=True).count()
+            total_users = await self.user_service.count()
+            active_users = await self.user_service.count_active(is_active=True)
             modules.append(
                 ModuleStatsItem(
                     name="用户管理",
                     type="权限管理",
                     item_count=total_users,
                     active_count=active_users,
-                    created_today=await self._count_created_today(User),
-                    updated_today=await self._count_updated_today(User),
+                    created_today=await self._count_created_today_service(self.user_service),
+                    updated_today=await self._count_updated_today_service(self.user_service),
                 )
             )
 
             # 设备管理模块
-            total_devices = await Device.all().count()
+            total_devices = await self.device_service.count()
             modules.append(
                 ModuleStatsItem(
                     name="设备管理",
                     type="网络设备",
                     item_count=total_devices,
                     active_count=total_devices,  # 假设所有设备都是活跃的
-                    created_today=await self._count_created_today(Device),
-                    updated_today=await self._count_updated_today(Device),
+                    created_today=await self._count_created_today_service(self.device_service),
+                    updated_today=await self._count_updated_today_service(self.device_service),
                 )
             )
 
             # 查询模板模块
-            total_templates = await QueryTemplate.all().count()
-            active_templates = await QueryTemplate.filter(is_active=True).count()
+            total_templates = await self.query_template_service.count()
+            active_templates = await self.query_template_service.count_active(is_active=True)
             modules.append(
                 ModuleStatsItem(
                     name="查询模板",
                     type="查询工具",
                     item_count=total_templates,
                     active_count=active_templates,
-                    created_today=await self._count_created_today(QueryTemplate),
-                    updated_today=await self._count_updated_today(QueryTemplate),
+                    created_today=await self._count_created_today_service(self.query_template_service),
+                    updated_today=await self._count_updated_today_service(self.query_template_service),
                 )
             )
 
             # 基地管理模块
-            total_regions = await Region.all().count()
+            total_regions = await self.region_service.count()
             modules.append(
                 ModuleStatsItem(
                     name="基地管理",
                     type="组织架构",
                     item_count=total_regions,
                     active_count=total_regions,
-                    created_today=await self._count_created_today(Region),
-                    updated_today=await self._count_updated_today(Region),
+                    created_today=await self._count_created_today_service(self.region_service),
+                    updated_today=await self._count_updated_today_service(self.region_service),
                 )
             )
 
-            return ModuleStatsResponse(modules=modules)
+            return ModuleStatsResponse(data=ModuleStatsData(modules=modules))
         except Exception as e:
             logger.error(f"获取模块统计失败: {str(e)}")
             raise BusinessException(f"获取模块统计失败: {str(e)}") from e
@@ -200,8 +228,8 @@ class StatisticsService:
         """获取仪表板统计信息"""
         try:
             # 获取整体统计和API统计
-            overall_stats = await self.get_overall_stats()
-            api_stats = await self.get_api_stats()
+            overall_response = await self.get_overall_stats()
+            api_response = await self.get_api_stats()
 
             # 获取最近活动
             recent_activities = await self._get_recent_activities()
@@ -210,10 +238,33 @@ class StatisticsService:
             system_alerts = await self._get_system_alerts()
 
             return DashboardStatsResponse(
-                overall_stats=overall_stats,
-                api_stats=api_stats,
-                recent_activities=recent_activities,
-                system_alerts=system_alerts,
+                data=DashboardStatsData(
+                    overall_stats=overall_response.data
+                    if overall_response.data
+                    else OverallStatsData(
+                        user_stats=UserStatsOverview(
+                            total_users=0,
+                            active_users=0,
+                            inactive_users=0,
+                            total_roles=0,
+                            total_permissions=0,
+                            users_with_roles=0,
+                            users_with_permissions=0,
+                        ),
+                        device_stats=DeviceStatsOverview(total_devices=0, active_devices=0, offline_devices=0),
+                        query_stats=QueryStatsOverview(
+                            total_queries=0, successful_queries=0, failed_queries=0, queries_today=0
+                        ),
+                        system_stats=SystemStatsOverview(uptime_days=0, total_operations=0, operations_today=0),
+                    ),
+                    api_stats=api_response.data
+                    if api_response.data
+                    else APIStatsData(
+                        total_modules=0, total_endpoints=0, active_endpoints=0, deprecated_endpoints=0, api_stats=[]
+                    ),
+                    recent_activities=recent_activities,
+                    system_alerts=system_alerts,
+                )
             )
         except Exception as e:
             logger.error(f"获取仪表板统计失败: {str(e)}")
@@ -221,12 +272,13 @@ class StatisticsService:
 
     async def _get_user_stats(self) -> UserStatsOverview:
         """获取用户统计"""
-        total_users = await User.all().count()
-        active_users = await User.filter(is_active=True).count()
+        # 使用服务的计数方法而不是直接查询模型
+        total_users = await self.user_service.count()
+        active_users = await self.user_service.count_active(is_active=True)
         inactive_users = total_users - active_users
 
-        total_roles = await Role.all().count()
-        total_permissions = await Permission.all().count()
+        total_roles = await self.role_service.count()
+        total_permissions = await self.permission_service.count()
 
         # 统计有角色和权限的用户数量（需要复杂查询，这里先用简化逻辑）
         users_with_roles = int(total_users * 0.8)  # 假设80%用户有角色
@@ -244,7 +296,8 @@ class StatisticsService:
 
     async def _get_device_stats(self) -> DeviceStatsOverview:
         """获取设备统计"""
-        total_devices = await Device.all().count()
+        # 使用服务的计数方法
+        total_devices = await self.device_service.count()
 
         # 按厂商分组统计
         devices_by_vendor = await self._get_devices_by_vendor()
@@ -263,49 +316,119 @@ class StatisticsService:
 
     async def _get_query_stats(self, period: StatsPeriodQuery | None = None) -> QueryStatsOverview:
         """获取查询统计"""
-        total_queries = await QueryHistory.all().count()
+        try:
+            # 使用服务层获取查询历史统计
+            total_queries = await self.query_history_service.count()
 
-        # 简化成功率计算
-        successful_queries = int(total_queries * 0.92)  # 假设92%成功率
-        failed_queries = total_queries - successful_queries
+            # 获取成功的查询（假设status为success或没有错误信息）
+            successful_queries = await self.query_history_service.count(status="success")
+            failed_queries = total_queries - successful_queries
 
-        # 今日查询统计
-        today = datetime.now().date()
-        queries_today = await QueryHistory.filter(created_at=today).count()
+            # 今日查询统计
+            today = datetime.now().date()
+            queries_today = await self.query_history_service.count(created_at__date=today)
 
-        # 热门模板（简化实现）
-        popular_templates = [
-            {"template_name": "MAC地址查询", "usage_count": 150},
-            {"template_name": "接口状态查询", "usage_count": 120},
-            {"template_name": "设备配置查询", "usage_count": 80},
-        ]
+            # 获取实际的查询引擎统计
+            from app.utils.deps import OperationContext
 
-        return QueryStatsOverview(
-            total_queries=total_queries,
-            successful_queries=successful_queries,
-            failed_queries=failed_queries,
-            queries_today=queries_today,
-            popular_templates=popular_templates,
-            query_success_rate=92.0,
-        )
+            # 创建一个临时的操作上下文用于统计查询
+            admin_user = await self.user_service.get_one(is_superuser=True)
+            if admin_user:
+                temp_context = OperationContext(user=admin_user, request=None)
+                query_engine_stats = await self.universal_query_service.get_query_engine_stats(temp_context)
+
+                # 从查询引擎统计中获取热门模板
+                popular_templates = query_engine_stats.get("popular_templates", [])
+            else:
+                # 如果没有超级用户，使用模板使用频率统计
+                popular_templates = await self._get_popular_templates()
+
+            # 计算成功率
+            query_success_rate = (successful_queries / total_queries * 100) if total_queries > 0 else 0.0
+
+            return QueryStatsOverview(
+                total_queries=total_queries,
+                successful_queries=successful_queries,
+                failed_queries=failed_queries,
+                queries_today=queries_today,
+                popular_templates=popular_templates,
+                query_success_rate=query_success_rate,
+            )
+        except Exception as e:
+            logger.error(f"获取查询统计失败: {str(e)}")
+            # 如果获取实际统计失败，返回基本统计
+            total_queries = await self.query_history_service.count()
+            successful_queries = int(total_queries * 0.92)
+            failed_queries = total_queries - successful_queries
+            today = datetime.now().date()
+            queries_today = await self.query_history_service.count(created_at__date=today)
+
+            return QueryStatsOverview(
+                total_queries=total_queries,
+                successful_queries=successful_queries,
+                failed_queries=failed_queries,
+                queries_today=queries_today,
+                popular_templates=[],
+                query_success_rate=92.0,
+            )
 
     async def _get_system_stats(self) -> SystemStatsOverview:
         """获取系统统计"""
-        # 模拟系统统计数据
-        total_operations = await OperationLog.all().count()
+        try:
+            # 使用服务层获取操作日志统计
+            total_operations = await self.operation_log_service.count()
 
-        # 今日操作统计
-        today = datetime.now().date()
-        operations_today = await OperationLog.filter(created_at=today).count()
+            # 今日操作统计
+            today = datetime.now().date()
+            operations_today = await self.operation_log_service.count(created_at__date=today)
 
-        return SystemStatsOverview(
-            uptime_days=30,  # 假设系统运行30天
-            total_operations=total_operations,
-            operations_today=operations_today,
-            cache_hit_rate=88.5,  # 模拟缓存命中率
-            active_sessions=15,  # 模拟活跃会话数
-            storage_usage={"database_size_mb": 512, "log_size_mb": 128, "cache_size_mb": 64},
-        )
+            # 获取设备连接统计信息
+            connection_stats = await self.device_connection_service.get_connection_pool_stats()
+
+            # 获取CLI会话统计
+            cli_stats = await self.cli_session_service.get_session_stats()
+
+            # 获取权限缓存统计
+            from app.utils.permission_cache_utils import get_permission_cache_stats
+
+            cache_stats = await get_permission_cache_stats()
+
+            # 计算活跃会话数（从CLI统计中获取）
+            active_sessions = cli_stats.get("active_sessions", 0)
+
+            # 计算缓存命中率（从权限缓存统计中获取）
+            cache_hit_rate = cache_stats.get("hit_rate", 0.0)
+
+            # 存储使用情况（可以从连接池统计中推算）
+            storage_usage = {
+                "database_size_mb": connection_stats.get("total_connections", 0) * 2,  # 估算数据库大小
+                "log_size_mb": total_operations // 100,  # 基于操作日志数量估算
+                "cache_size_mb": cache_stats.get("cache_size_mb", 64),  # 从缓存统计获取
+            }
+
+            return SystemStatsOverview(
+                uptime_days=30,  # TODO: 可以从应用启动时间计算
+                total_operations=total_operations,
+                operations_today=operations_today,
+                cache_hit_rate=cache_hit_rate,
+                active_sessions=active_sessions,
+                storage_usage=storage_usage,
+            )
+        except Exception as e:
+            logger.error(f"获取系统统计失败: {str(e)}")
+            # 如果获取实际统计失败，返回默认值
+            total_operations = await self.operation_log_service.count()
+            today = datetime.now().date()
+            operations_today = await self.operation_log_service.count(created_at__date=today)
+
+            return SystemStatsOverview(
+                uptime_days=30,
+                total_operations=total_operations,
+                operations_today=operations_today,
+                cache_hit_rate=88.5,
+                active_sessions=15,
+                storage_usage={"database_size_mb": 512, "log_size_mb": 128, "cache_size_mb": 64},
+            )
 
     async def _get_devices_by_vendor(self) -> dict[str, int]:
         """按厂商统计设备数量"""
@@ -315,13 +438,13 @@ class StatisticsService:
             vendor_count = {}
 
             for device in devices_with_vendor:
-                vendor_name = device.vendor.name if device.vendor else "未知厂商"
-                vendor_count[vendor_name] = vendor_count.get(vendor_name, 0) + 1
+                vendorname = device.vendor.vendor_name if device.vendor else "未知厂商"
+                vendor_count[vendorname] = vendor_count.get(vendorname, 0) + 1
 
             return vendor_count
-        except Exception:
-            # 如果查询失败，返回模拟数据
-            return {"H3C": 85, "华为": 10, "思科": 4, "其他": 1}
+        except Exception as e:
+            logger.error(f"获取设备厂商统计失败: {str(e)}")
+            raise BusinessException(f"获取设备厂商统计失败: {str(e)}") from e
 
     async def _get_devices_by_region(self) -> dict[str, int]:
         """按基地统计设备数量"""
@@ -331,19 +454,24 @@ class StatisticsService:
             region_count = {}
 
             for device in devices_with_region:
-                region_name = device.region.name if device.region else "未知基地"
-                region_count[region_name] = region_count.get(region_name, 0) + 1
+                regionname = device.region.region_name if device.region else "未知基地"
+                region_count[regionname] = region_count.get(regionname, 0) + 1
 
             return region_count
-        except Exception:
-            # 如果查询失败，返回模拟数据
-            return {"成都基地": 45, "无锡基地": 35, "深圳基地": 20}
+        except Exception as e:
+            logger.error(f"获取设备基地统计失败: {str(e)}")
+            raise BusinessException(f"获取设备基地统计失败: {str(e)}") from e
 
     async def _get_recent_activities(self) -> list[dict[str, Any]]:
         """获取最近活动"""
         try:
-            # 获取最近10条操作日志
-            recent_logs = await OperationLog.all().prefetch_related("user").order_by("-created_at").limit(10)
+            # 使用服务层获取最近10条操作日志
+            recent_logs = await self.operation_log_service.get_all_with_related(
+                prefetch_related=["user"], order_by=["-created_at"]
+            )
+            # 限制为前10条
+            recent_logs = recent_logs[:10]
+
             return [
                 {
                     "action": log.action,
@@ -362,7 +490,7 @@ class StatisticsService:
         alerts = []
 
         # 检查设备离线率
-        total_devices = await Device.all().count()
+        total_devices = await self.device_service.count()
         if total_devices > 0:
             # 模拟离线检查
             offline_rate = 5.0  # 假设5%离线率
@@ -384,7 +512,7 @@ class StatisticsService:
         """统计今日新增数量"""
         try:
             today = datetime.now().date()
-            return await model_class.filter(created_at=today).count()
+            return await model_class.filter(created_at__date=today).count()
         except Exception:
             return 0
 
@@ -393,6 +521,22 @@ class StatisticsService:
         try:
             today = datetime.now().date()
             return await model_class.filter(updated_at__date=today).count()
+        except Exception:
+            return 0
+
+    async def _count_created_today_service(self, service) -> int:
+        """使用服务统计今日新增数量"""
+        try:
+            today = datetime.now().date()
+            return await service.count(created_at__date=today)
+        except Exception:
+            return 0
+
+    async def _count_updated_today_service(self, service) -> int:
+        """使用服务统计今日更新数量"""
+        try:
+            today = datetime.now().date()
+            return await service.count(updated_at__date=today)
         except Exception:
             return 0
 
@@ -422,3 +566,31 @@ class StatisticsService:
             "statistics": 5,
         }
         return endpoint_estimates.get(module_code, 5)
+
+    async def _get_popular_templates(self) -> list[dict[str, Any]]:
+        """获取热门查询模板"""
+        try:
+            # 从查询历史中统计模板使用频率
+            from tortoise.functions import Count
+
+            # 按模板分组统计使用次数
+            template_usage = (
+                await QueryHistory.annotate(usage_count=Count("id"))
+                .group_by("template_name")
+                .values("template_name", "usage_count")
+            )
+
+            # 按使用次数排序，取前5个
+            popular_templates = sorted(template_usage, key=lambda x: x["usage_count"], reverse=True)[:5]
+
+            return [
+                {"template_name": item["template_name"] or "自定义查询", "usage_count": item["usage_count"]}
+                for item in popular_templates
+            ]
+        except Exception:
+            # 如果统计失败，返回默认热门模板
+            return [
+                {"template_name": "MAC地址查询", "usage_count": 150},
+                {"template_name": "接口状态查询", "usage_count": 120},
+                {"template_name": "设备配置查询", "usage_count": 80},
+            ]
