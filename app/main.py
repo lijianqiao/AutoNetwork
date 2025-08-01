@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.events import lifespan
 from app.core.exceptions import setup_exception_handlers
 from app.core.middleware import setup_middlewares
+from app.schemas.base import BaseResponse
 
 
 def create_app() -> FastAPI:
@@ -87,6 +88,6 @@ app = create_app()
 
 # 根路由
 @app.get("/", tags=["系统"])
-async def root():
+async def root() -> BaseResponse[dict]:
     """根路由"""
-    return {"message": "Welcome to the Fastapi Admin Template API!"}
+    return BaseResponse(data={"message": "欢迎使用网络自动化管理平台API!"})

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends
 from app.api.v1 import v1_router
 from app.core.config import settings
 from app.models.user import User
+from app.schemas.base import BaseResponse
 from app.utils.deps import get_current_active_user
 
 # 创建主路由
@@ -28,7 +29,7 @@ api_router.include_router(v1_router, prefix="/v1")
 
 # 健康检查路由
 @api_router.get("/health", tags=["系统"])
-async def health_check():
+async def health_check() -> BaseResponse[dict]:
     """统一健康检查接口
 
     检查系统、数据库、Redis缓存、API接口等组件健康状态
@@ -85,26 +86,26 @@ async def health_check():
         "uptime": "运行中",  # 可以添加更详细的系统信息
     }
 
-    return health_data
+    return BaseResponse(data=health_data, message="健康检查成功")
 
 
 # 监控指标路由
 @api_router.get("/metrics", tags=["监控"])
-async def get_metrics(_: User = Depends(get_current_active_user)):
+async def get_metrics(_: User = Depends(get_current_active_user)) -> BaseResponse[dict]:
     """获取应用监控指标"""
     if not settings.ENABLE_METRICS:
-        return {"error": "监控功能未启用"}
+        return BaseResponse(data={"error": "监控功能未启用"})
 
     try:
         from app.utils.metrics import get_system_metrics, metrics_collector
 
         app_metrics = metrics_collector.get_metrics()
         system_metrics = get_system_metrics()
-
-        return {
+        result = {
             "timestamp": time.time(),
             "application": app_metrics,
             "system": system_metrics,
         }
+        return BaseResponse(data=result)
     except ImportError:
-        return {"error": "监控模块未安装"}
+        return BaseResponse(data={"error": "监控模块未安装"})
