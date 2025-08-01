@@ -124,6 +124,12 @@ def get_security_manager() -> SecurityManager:
     return security_manager
 
 
+def get_statistics_service():
+    from app.services.statistics import StatisticsService
+
+    return StatisticsService()
+
+
 # ==================== 用户依赖 ====================
 async def get_current_user(token: str = Depends(reusable_oauth2), user_service=Depends(get_user_service)) -> User:
     """通过JWT令牌获取当前用户模型"""

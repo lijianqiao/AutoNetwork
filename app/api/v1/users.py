@@ -4,6 +4,18 @@
 @FileName: users.py
 @DateTime: 2025/07/08
 @Docs: 用户管理API端点
+
+职责说明：
+- 用户基本信息的CRUD操作（创建、查询、更新、删除）
+- 用户状态管理（启用/禁用）
+- 用户密码管理
+- 用户批量操作（批量创建、更新、删除）
+
+重要说明：
+- 本模块专注于用户基本信息管理
+- 用户-角色关系管理请使用 user_relations.py 模块
+- 用户-权限关系管理请使用 user_relations.py 模块
+- 职责边界清晰，避免功能重复
 """
 
 from uuid import UUID
@@ -16,10 +28,6 @@ from app.core.permissions.simple_decorators import (
 )
 from app.schemas.base import PaginatedResponse, SuccessResponse
 from app.schemas.user import (
-    UserAssignPermissionsRequest,
-    UserAssignPermissionsResponse,
-    UserAssignRolesRequest,
-    UserAssignRolesResponse,
     UserCreateRequest,
     UserCreateResponse,
     UserDeleteResponse,
@@ -107,112 +115,6 @@ async def update_user_status(
     """更新用户状态"""
     await user_service.update_user_status(user_id, is_active, operation_context=operation_context)
     result = SuccessResponse()
-    return result
-
-
-@router.post("/{user_id}/roles", response_model=UserAssignRolesResponse, summary="分配用户角色")
-async def assign_user_roles(
-    user_id: UUID,
-    role_data: UserAssignRolesRequest,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_ROLES)),
-):
-    """分配用户角色（全量设置）"""
-    result = await user_service.assign_roles(user_id, role_data.role_ids, operation_context=operation_context)
-    return result
-
-
-# 用户角色关系管理端点
-
-
-@router.post("/{user_id}/roles/add", response_model=UserAssignRolesResponse, summary="为用户添加角色")
-async def add_user_roles(
-    user_id: UUID,
-    role_data: UserAssignRolesRequest,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_ROLES)),
-):
-    """为用户增量添加角色"""
-    result = await user_service.add_user_roles(user_id, role_data.role_ids, operation_context=operation_context)
-    return result
-
-
-@router.delete("/{user_id}/roles/remove", response_model=UserAssignRolesResponse, summary="移除用户角色")
-async def remove_user_roles(
-    user_id: UUID,
-    role_data: UserAssignRolesRequest,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_ROLES)),
-):
-    """移除用户的指定角色"""
-    result = await user_service.remove_user_roles(user_id, role_data.role_ids, operation_context=operation_context)
-    return result
-
-
-@router.get("/{user_id}/roles", response_model=UserListResponseWrapper, summary="获取用户角色列表")
-async def get_user_roles(
-    user_id: UUID,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_READ)),
-):
-    """获取用户的角色列表"""
-    result = await user_service.get_user_roles(user_id, operation_context=operation_context)
-    return result
-
-
-# 用户权限关系管理端点
-
-
-@router.post("/{user_id}/permissions", response_model=UserAssignPermissionsResponse, summary="设置用户权限")
-async def assign_user_permissions(
-    user_id: UUID,
-    permission_data: UserAssignPermissionsRequest,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_PERMISSIONS)),
-):
-    """为用户分配直接权限（全量设置）"""
-    result = await user_service.assign_permissions_to_user(
-        user_id, permission_data, operation_context=operation_context
-    )
-    return result
-
-
-@router.post("/{user_id}/permissions/add", response_model=UserAssignPermissionsResponse, summary="为用户添加权限")
-async def add_user_permissions(
-    user_id: UUID,
-    permission_data: UserAssignPermissionsRequest,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_PERMISSIONS)),
-):
-    """为用户增量添加权限"""
-    result = await user_service.add_user_permissions(
-        user_id, permission_data.permission_ids, operation_context=operation_context
-    )
-    return result
-
-
-@router.delete("/{user_id}/permissions/remove", response_model=UserAssignPermissionsResponse, summary="移除用户权限")
-async def remove_user_permissions(
-    user_id: UUID,
-    permission_data: UserAssignPermissionsRequest,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_PERMISSIONS)),
-):
-    """移除用户的指定权限"""
-    result = await user_service.remove_user_permissions(
-        user_id, permission_data.permission_ids, operation_context=operation_context
-    )
-    return result
-
-
-@router.get("/{user_id}/permissions", response_model=UserListResponseWrapper, summary="获取用户权限列表")
-async def get_user_permissions(
-    user_id: UUID,
-    user_service: UserService = Depends(get_user_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.USER_READ)),
-):
-    """获取用户的直接权限列表"""
-    result = await user_service.get_user_permissions(user_id, operation_context=operation_context)
     return result
 
 

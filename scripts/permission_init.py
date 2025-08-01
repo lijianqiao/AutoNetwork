@@ -49,6 +49,7 @@ class PermissionInitializer:
             "network_query": "网络查询",
             "import_export": "导入导出",
             "cli": "CLI",
+            "statistics": "统计",
         }
 
         # 操作名称映射
@@ -86,6 +87,14 @@ class PermissionInitializer:
             "cli_execute": "CLI执行",
             "cli_config": "CLI配置",
             "cli_session_manage": "CLI会话管理",
+            "statistics_access": "统计模块访问",
+            "statistics_read": "统计数据读取",
+            "statistics_dashboard": "统计仪表板查看",
+            "statistics_api_stats": "API统计查看",
+            "statistics_user_stats": "用户统计查看",
+            "statistics_device_stats": "设备统计查看",
+            "statistics_query_stats": "查询统计查看",
+            "statistics_system_stats": "系统统计查看",
         }
 
         # 特殊权限名称覆盖（用于处理无法通过规则生成的特殊情况）

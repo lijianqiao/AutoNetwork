@@ -8,7 +8,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 
 from app.core.exceptions import NotFoundException
 from app.core.permissions.simple_decorators import (
@@ -22,7 +22,6 @@ from app.schemas.device import (
     DeviceBatchUpdateResponse,
     DeviceCreateRequest,
     DeviceCreateResponse,
-    DeviceDeleteResponse,
     DeviceDetailResponseWrapper,
     DeviceListRequest,
     DeviceListResponse,
@@ -138,20 +137,9 @@ async def batch_delete_devices(
     return BaseResponse(data={"message": f"成功删除 {deleted_count} 台设备"})
 
 
-@router.post("/{device_id}/test-connection", response_model=DeviceDeleteResponse, summary="测试设备连接")
-async def test_device_connection(
-    device_id: UUID,
-    username: str = Query(description="登录用户名"),
-    password: str = Query(description="登录密码"),
-    service: DeviceService = Depends(get_device_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.DEVICE_CONNECTION_TEST)),
-):
-    """测试设备连接性"""
-    # TODO: 实现实际的设备连接测试逻辑
-    result = {
-        "device_id": device_id,
-        "connection_status": "success",
-        "message": "设备连接测试成功",
-        "response_time": 150,
-    }
-    return BaseResponse(data=result)
+# 注意：设备连接测试功能已迁移到 device_connection.py
+# 请使用以下接口进行设备连接测试：
+# - POST /device-connection/test - 测试单个设备连接
+# - POST /device-connection/test/batch - 批量测试设备连接
+# - POST /device-connection/test/stability - 测试设备连接稳定性
+# - POST /device-connection/test/criteria - 根据条件批量测试设备

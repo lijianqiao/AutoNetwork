@@ -2,72 +2,25 @@
 @Author: li
 @Email: lijianqiao2906@live.com
 @FileName: admin_dashboard.py
-@DateTime: 2025/07/10
-@Docs: 后台管理系统仪表板API - 统计数据和系统监控
+@DateTime: 2025-01-29 10:08:28
+@Docs: 后台管理相关的API接口
 """
 
-from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
 
-from app.core.permissions.simple_decorators import (
-    Permissions,
-    require_permission,
-)
+from app.core.permissions.simple_decorators import OperationContext, Permissions, require_permission
 from app.schemas.base import BaseResponse, SuccessResponse
-from app.schemas.dashboard import DashboardStats, UserPermissionCheck
-from app.services.operation_log import OperationLogService
-from app.services.permission import PermissionService
+from app.schemas.dashboard import UserPermissionCheck
 from app.services.role import RoleService
 from app.services.user import UserService
 from app.utils.deps import (
-    OperationContext,
-    get_operation_log_service,
-    get_permission_service,
     get_role_service,
     get_user_service,
 )
 
 router = APIRouter(prefix="/admin", tags=["后台管理仪表板"])
-
-
-# 统计数据端点
-
-
-@router.get("/dashboard/stats", response_model=BaseResponse[DashboardStats], summary="获取仪表板统计数据")
-async def get_dashboard_stats(
-    user_service: UserService = Depends(get_user_service),
-    role_service: RoleService = Depends(get_role_service),
-    permission_service: PermissionService = Depends(get_permission_service),
-    operation_log_service: OperationLogService = Depends(get_operation_log_service),
-    operation_context: OperationContext = Depends(require_permission(Permissions.ADMIN_READ)),
-):
-    """获取后台管理系统的核心统计数据"""
-    # 使用现有的 list 方法来获取统计数据
-    from app.schemas.operation_log import OperationLogListRequest
-    from app.schemas.permission import PermissionListRequest
-    from app.schemas.role import RoleListRequest
-    from app.schemas.user import UserListRequest
-
-    # 获取各类数据的总数
-    users, total_users = await user_service.get_users(UserListRequest(page=1, page_size=1), operation_context)
-    roles, total_roles = await role_service.get_roles(RoleListRequest(page=1, page_size=1), operation_context)
-    permissions, total_permissions = await permission_service.get_permissions(
-        PermissionListRequest(page=1, page_size=1), operation_context
-    )
-    # 获取今天的操作日志数量
-    today = datetime.today()
-    today_logs_request = OperationLogListRequest(page=1, page_size=1, start_date=today, end_date=today)
-    today_logs, today_operations = await operation_log_service.get_logs(today_logs_request, operation_context)
-
-    stats_data = DashboardStats(
-        total_users=total_users,
-        total_roles=total_roles,
-        total_permissions=total_permissions,
-        today_operations=today_operations,
-    )
-    return BaseResponse(data=stats_data, message="获取仪表板统计数据成功")
 
 
 # 权限验证端点

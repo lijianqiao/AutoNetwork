@@ -17,19 +17,9 @@ from app.utils.permission_cache_utils import (
     clear_all_permission_cache,
     clear_role_permission_cache,
     clear_user_permission_cache,
-    get_permission_cache_stats,
 )
 
 router = APIRouter(prefix="/permission-cache", tags=["权限缓存管理"])
-
-
-@router.get("/stats", response_model=BaseResponse[dict], summary="获取权限缓存统计")
-async def get_cache_stats(
-    operation_context: OperationContext = Depends(require_permission(Permissions.SYSTEM_ADMIN)),
-):
-    """获取权限缓存统计信息"""
-    stats = await get_permission_cache_stats()
-    return BaseResponse(data=stats)
 
 
 @router.get("/test/{user_id}", response_model=BaseResponse[dict], summary="测试用户权限缓存")

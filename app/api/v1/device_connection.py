@@ -3,73 +3,41 @@
 @Email: lijianqiao2906@live.com
 @FileName: device_connection.py
 @DateTime: 2025/07/25 21:02:00
-@Docs: 设备连接管理API控制器 - 提供设备连接测试、认证管理、连接池管理等RESTful接口
+@Docs: 设备连接与认证管理API控制器 - 提供设备连接测试、认证管理、连接池管理等RESTful接口
 """
 
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
 
 from app.core.exceptions import BusinessException
 from app.models.user import User
-from app.schemas.base import BaseResponse
+from app.schemas.authentication import (
+    AuthenticationConfigInfo,
+    AuthenticationTestRequest,
+    AuthenticationTestResult,
+    BatchAuthenticationTestRequest,
+    BatchAuthenticationTestResult,
+    DeviceCredentialsRequest,
+    DeviceCredentialsResponse,
+    UsernameGenerationRequest,
+    UsernameGenerationResult,
+)
+from app.schemas.base import BaseResponse, SuccessResponse
+from app.schemas.device_connection import (
+    BatchConnectionTestRequest,
+    ConnectionStabilityTestRequest,
+    CredentialsValidationRequest,
+    DeviceConnectionTestRequest,
+    DevicesByCriteriaTestRequest,
+    PasswordEncryptionRequest,
+)
+from app.services.authentication import AuthenticationManager
 from app.services.device_connection import DeviceConnectionService
 from app.utils.deps import get_current_user
 from app.utils.logger import logger
 
-router = APIRouter(prefix="/device-connection", tags=["设备连接管理"])
-
-
-# 请求模型
-class DeviceConnectionTestRequest(BaseModel):
-    """设备连接测试请求"""
-
-    device_id: UUID = Field(..., description="设备ID")
-    dynamic_password: str | None = Field(None, description="动态密码")
-
-
-class BatchConnectionTestRequest(BaseModel):
-    """批量设备连接测试请求"""
-
-    device_ids: list[UUID] = Field(..., description="设备ID列表")
-    dynamic_password: str | None = Field(None, description="统一动态密码（适用于所有动态密码设备）")
-    dynamic_passwords: dict[str, str] | None = Field(None, description="设备特定动态密码映射（优先级高于统一密码）")
-    max_concurrent: int = Field(20, ge=1, le=50, description="最大并发数")
-
-
-class ConnectionStabilityTestRequest(BaseModel):
-    """连接稳定性测试请求"""
-
-    device_id: UUID = Field(..., description="设备ID")
-    duration: int = Field(60, ge=10, le=3600, description="测试持续时间（秒）")
-    interval: int = Field(10, ge=5, le=60, description="测试间隔（秒）")
-
-
-class CredentialsValidationRequest(BaseModel):
-    """认证凭据验证请求"""
-
-    device_id: UUID = Field(..., description="设备ID")
-    username: str = Field(..., description="用户名")
-    password: str = Field(..., description="密码")
-    ssh_port: int = Field(22, ge=1, le=65535, description="SSH端口")
-
-
-class PasswordEncryptionRequest(BaseModel):
-    """密码加密请求"""
-
-    password: str = Field(..., description="明文密码")
-
-
-class DevicesByCriteriaTestRequest(BaseModel):
-    """根据条件批量测试设备请求"""
-
-    vendor_id: UUID | None = Field(None, description="厂商ID")
-    region_id: UUID | None = Field(None, description="基地ID")
-    device_type: str | None = Field(None, description="设备类型")
-    network_layer: str | None = Field(None, description="网络层级")
-    is_active: bool = Field(True, description="是否活跃")
-    max_concurrent: int = Field(20, ge=1, le=50, description="最大并发数")
+router = APIRouter(prefix="/device-connection", tags=["设备连接与认证管理"])
 
 
 # 响应模型已移至 app.schemas.base
@@ -294,60 +262,6 @@ async def encrypt_device_password(
         ) from e
 
 
-@router.get("/pool/stats", response_model=BaseResponse[dict], summary="获取连接池统计信息")
-async def get_connection_pool_stats(
-    service: DeviceConnectionService = Depends(get_device_connection_service),
-    current_user: User = Depends(get_current_user),
-):
-    """获取连接池统计信息"""
-    try:
-        logger.info(f"用户 {current_user.username} 请求获取连接池统计信息")
-
-        result = await service.get_connection_pool_stats()
-
-        return BaseResponse(data=result, message="获取连接池统计信息成功")
-
-    except BusinessException as e:
-        logger.warning(f"获取连接池统计信息业务异常: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
-    except Exception as e:
-        logger.error(f"获取连接池统计信息系统异常: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="获取连接池统计信息失败",
-        ) from e
-
-
-@router.get("/manager/stats", response_model=BaseResponse[dict], summary="获取连接管理器统计信息")
-async def get_connection_manager_stats(
-    service: DeviceConnectionService = Depends(get_device_connection_service),
-    current_user: User = Depends(get_current_user),
-):
-    """获取连接管理器统计信息"""
-    try:
-        logger.info(f"用户 {current_user.username} 请求获取连接管理器统计信息")
-
-        result = await service.get_connection_manager_stats()
-
-        return BaseResponse(data=result, message="获取连接管理器统计信息成功")
-
-    except BusinessException as e:
-        logger.warning(f"获取连接管理器统计信息业务异常: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
-    except Exception as e:
-        logger.error(f"获取连接管理器统计信息系统异常: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="获取连接管理器统计信息失败",
-        ) from e
-
-
 @router.post("/pool/cleanup", response_model=BaseResponse[dict], summary="清理空闲连接")
 async def cleanup_idle_connections(
     idle_timeout: int | None = Query(None, ge=60, le=3600, description="空闲超时时间（秒）"),
@@ -493,19 +407,34 @@ async def test_devices_by_criteria(
         ) from e
 
 
-@router.delete("/cache/password", response_model=BaseResponse[dict], summary="清除动态密码缓存")
-async def clear_dynamic_password_cache(
+@router.delete("/cache/password/clear", response_model=SuccessResponse, summary="清除动态密码缓存（统一接口）")
+async def clear_dynamic_password_cache_unified(
     device_id: UUID | None = Query(None, description="设备ID，为空则清除所有缓存"),
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
 ):
-    """清除动态密码缓存"""
+    """清除动态密码缓存（统一接口）
+
+    这是统一的动态密码缓存清除接口，整合了原来的两个接口：
+    - /cache/password (原DeviceConnectionService)
+    - /auth/cache/clear (原AuthenticationManager)
+    """
     try:
         logger.info(f"用户 {current_user.username} 请求清除动态密码缓存")
 
-        result = service.clear_dynamic_password_cache(device_id)
+        # 使用DeviceConnectionService的方法
+        service.clear_dynamic_password_cache(device_id)
 
-        return BaseResponse(data=result, message="动态密码缓存已清除")
+        # 也清除AuthenticationManager的缓存
+        auth_manager = AuthenticationManager()
+        auth_manager.clear_dynamic_password_cache(device_id)
+
+        if device_id:
+            message = f"已清除设备 {device_id} 的动态密码缓存"
+        else:
+            message = "已清除所有动态密码缓存"
+
+        return SuccessResponse(message=message)
 
     except BusinessException as e:
         logger.warning(f"清除动态密码缓存业务异常: {e}")
@@ -521,18 +450,38 @@ async def clear_dynamic_password_cache(
         ) from e
 
 
-@router.get("/cache/password/info", response_model=BaseResponse[dict], summary="获取缓存密码信息")
-async def get_cached_password_info(
+@router.get("/cache/password/info/unified", response_model=BaseResponse[dict], summary="获取缓存密码信息（统一接口）")
+async def get_cached_password_info_unified(
     service: DeviceConnectionService = Depends(get_device_connection_service),
     current_user: User = Depends(get_current_user),
 ):
-    """获取缓存密码信息"""
+    """获取缓存密码信息（统一接口）
+
+    这是统一的缓存密码信息获取接口，整合了原来的两个接口：
+    - /cache/password/info (原DeviceConnectionService)
+    - /auth/cache/info (原AuthenticationManager)
+    """
     try:
         logger.info(f"用户 {current_user.username} 请求获取缓存密码信息")
 
-        result = service.get_cached_password_info()
+        # 获取DeviceConnectionService的缓存信息
+        device_connection_result = service.get_cached_password_info()
 
-        return BaseResponse(data=result, message="获取缓存密码信息成功")
+        # 获取AuthenticationManager的缓存信息
+        auth_manager = AuthenticationManager()
+        auth_cached_count = auth_manager.get_cached_password_count()
+
+        unified_result = {
+            "device_connection_cache": device_connection_result,
+            "authentication_cache": {
+                "cached_count": auth_cached_count,
+                "message": f"当前缓存了 {auth_cached_count} 个动态密码",
+            },
+            "total_cached_count": auth_cached_count,
+            "message": "获取缓存密码信息成功",
+        }
+
+        return BaseResponse(data=unified_result, message="获取缓存密码信息成功")
 
     except BusinessException as e:
         logger.warning(f"获取缓存密码信息业务异常: {e}")
@@ -574,3 +523,268 @@ async def get_test_statistics(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="获取测试统计信息失败",
         ) from e
+
+
+# ===== 设备认证管理功能 =====
+
+
+@router.post("/auth/credentials", response_model=BaseResponse[DeviceCredentialsResponse], summary="获取设备认证凭据")
+async def get_device_auth_credentials(
+    request: DeviceCredentialsRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """获取设备认证凭据
+
+    支持动态密码（用户手动输入）和静态密码（数据库获取）两种认证方式。
+    对于动态密码认证的设备，需要在请求中提供dynamic_password参数。
+    """
+    logger.info(f"用户 {current_user.username} 请求获取设备认证凭据: device_id={request.device_id}")
+
+    auth_manager = AuthenticationManager()
+
+    try:
+        # 获取认证凭据
+        credentials = await auth_manager.get_device_credentials(
+            device_id=request.device_id, dynamic_password=request.dynamic_password
+        )
+
+        # 获取设备信息用于响应
+        device = await auth_manager.device_dao.get_by_id(request.device_id)
+        if not device:
+            raise Exception("设备不存在")
+
+        region = await device.region
+        vendor = await device.vendor
+
+        credentials_data = DeviceCredentialsResponse(
+            device_id=str(device.id),
+            hostname=device.hostname,
+            ip_address=device.ip_address,
+            auth_type=device.auth_type,
+            username=credentials.username,
+            has_password=bool(credentials.password),
+            has_snmp_community=bool(credentials.snmp_community),
+            ssh_port=credentials.ssh_port,
+            region_code=region.region_code if region else "",
+            vendor_code=vendor.vendor_code if vendor else "",
+            scrapli_platform=vendor.scrapli_platform if vendor else "",
+        )
+
+        return BaseResponse(data=credentials_data, message="获取设备认证凭据成功")
+
+    except Exception as e:
+        logger.error(f"获取设备认证凭据失败: device_id={request.device_id}, error={e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        ) from e
+
+
+@router.post("/auth/test", response_model=BaseResponse[AuthenticationTestResult], summary="测试设备认证")
+async def test_device_authentication(
+    request: AuthenticationTestRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """测试设备认证
+
+    验证设备的认证凭据是否正确配置，但不实际连接设备。
+    主要用于检查认证配置的完整性和有效性。
+    """
+    logger.info(f"用户 {current_user.username} 请求测试设备认证: device_id={request.device_id}")
+
+    auth_manager = AuthenticationManager()
+
+    try:
+        # 获取设备信息
+        device = await auth_manager.device_dao.get_by_id(request.device_id)
+        if not device:
+            raise Exception("设备不存在")
+
+        region = await device.region
+        vendor = await device.vendor
+
+        # 获取认证凭据
+        credentials = await auth_manager.get_device_credentials(
+            device_id=request.device_id, dynamic_password=request.dynamic_password
+        )
+
+        # 验证凭据
+        is_valid = await auth_manager.validate_device_credentials(request.device_id, credentials)
+
+        result = AuthenticationTestResult(
+            success=is_valid,
+            device_id=str(device.id),
+            hostname=device.hostname,
+            ip_address=device.ip_address,
+            auth_type=device.auth_type,
+            username=credentials.username,
+            has_password=bool(credentials.password),
+            has_snmp_community=bool(credentials.snmp_community),
+            ssh_port=credentials.ssh_port,
+            credentials_valid=is_valid,
+            region_code=region.region_code if region else "",
+            vendor_code=vendor.vendor_code if vendor else "",
+            scrapli_platform=vendor.scrapli_platform if vendor else "",
+            error=None if is_valid else "认证凭据验证失败",
+            message="认证测试完成",
+        )
+
+        return BaseResponse(data=result, message="认证测试完成")
+
+    except Exception as e:
+        logger.error(f"测试设备认证失败: device_id={request.device_id}, error={e}")
+
+        result = AuthenticationTestResult(
+            success=False, device_id=str(request.device_id), error=str(e), message="认证测试失败"
+        )
+        return BaseResponse(data=result, message="认证测试失败")
+
+
+@router.post("/auth/test/batch", response_model=BaseResponse[BatchAuthenticationTestResult], summary="批量测试设备认证")
+async def batch_test_device_authentication(
+    request: BatchAuthenticationTestRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """批量测试设备认证
+
+    对多个设备进行认证测试，支持为不同设备提供不同的动态密码。
+    """
+    logger.info(f"用户 {current_user.username} 请求批量测试设备认证: 设备数量={len(request.device_ids)}")
+
+    auth_manager = AuthenticationManager()
+    results = []
+    success_count = 0
+    failed_count = 0
+
+    for device_id in request.device_ids:
+        try:
+            # 获取该设备的动态密码
+            dynamic_password = None
+            if request.dynamic_passwords:
+                dynamic_password = request.dynamic_passwords.get(str(device_id))
+
+            # 获取设备信息
+            device = await auth_manager.device_dao.get_by_id(device_id)
+            if not device:
+                raise Exception("设备不存在")
+
+            region = await device.region
+            vendor = await device.vendor
+
+            # 获取认证凭据
+            credentials = await auth_manager.get_device_credentials(
+                device_id=device_id, dynamic_password=dynamic_password
+            )
+
+            # 验证凭据
+            is_valid = await auth_manager.validate_device_credentials(device_id, credentials)
+
+            result = AuthenticationTestResult(
+                success=is_valid,
+                device_id=str(device.id),
+                hostname=device.hostname,
+                ip_address=device.ip_address,
+                auth_type=device.auth_type,
+                username=credentials.username,
+                has_password=bool(credentials.password),
+                has_snmp_community=bool(credentials.snmp_community),
+                ssh_port=credentials.ssh_port,
+                credentials_valid=is_valid,
+                region_code=region.region_code if region else "",
+                vendor_code=vendor.vendor_code if vendor else "",
+                scrapli_platform=vendor.scrapli_platform if vendor else "",
+                error=None if is_valid else "认证凭据验证失败",
+                message="认证测试完成",
+            )
+
+            results.append(result)
+
+            if result.success:
+                success_count += 1
+            else:
+                failed_count += 1
+
+        except Exception as e:
+            logger.error(f"批量测试中设备认证失败: device_id={device_id}, error={e}")
+
+            error_result = AuthenticationTestResult(
+                success=False, device_id=str(device_id), error=str(e), message="认证测试异常"
+            )
+            results.append(error_result)
+            failed_count += 1
+
+    total_count = len(request.device_ids)
+    summary = f"总计 {total_count} 个设备，成功 {success_count} 个，失败 {failed_count} 个"
+
+    batch_result = BatchAuthenticationTestResult(
+        total_count=total_count,
+        success_count=success_count,
+        failed_count=failed_count,
+        results=results,
+        summary=summary,
+    )
+
+    return BaseResponse(
+        data=batch_result,
+        message="批量认证测试完成",
+    )
+
+
+@router.post("/auth/username/generate", response_model=BaseResponse[UsernameGenerationResult], summary="生成动态用户名")
+async def generate_dynamic_username(
+    request: UsernameGenerationRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """生成动态用户名
+
+    根据网络层级和基地代码生成符合规则的用户名。
+    """
+    logger.info(
+        f"用户 {current_user.username} 请求生成动态用户名: layer={request.network_layer}, region={request.region_code}"
+    )
+
+    auth_manager = AuthenticationManager()
+
+    # 获取用户名模式
+    pattern = auth_manager.username_patterns.get(request.network_layer, "{region_code}_{network_layer}_admin")
+
+    # 生成用户名
+    username = pattern.format(region_code=request.region_code.lower(), network_layer=request.network_layer)
+
+    result = UsernameGenerationResult(
+        network_layer=request.network_layer,
+        region_code=request.region_code,
+        generated_username=username,
+        pattern_used=pattern,
+    )
+
+    return BaseResponse(
+        data=result,
+        message="用户名生成成功",
+    )
+
+
+@router.get("/auth/config", response_model=BaseResponse[AuthenticationConfigInfo], summary="获取认证配置信息")
+async def get_authentication_config(
+    current_user: User = Depends(get_current_user),
+):
+    """获取认证配置信息
+
+    返回认证系统的配置信息，包括用户名生成模式、支持的认证类型等。
+    """
+    logger.debug(f"用户 {current_user.username} 请求获取认证配置信息")
+
+    auth_manager = AuthenticationManager()
+    cached_count = auth_manager.get_cached_password_count()
+
+    config_info = AuthenticationConfigInfo(
+        username_patterns=auth_manager.username_patterns,
+        supported_auth_types=["dynamic", "static"],
+        dynamic_password_cache_enabled=True,
+        current_cached_count=cached_count,
+    )
+
+    return BaseResponse(
+        data=config_info,
+        message="获取认证配置成功",
+    )

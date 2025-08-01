@@ -3,24 +3,40 @@
 @Email: lijianqiao2906@live.com
 @FileName: universal_query.py
 @DateTime: 2025/01/29
-@Docs: 通用查询API - 基于模板的查询接口
+@Docs: 通用查询API - 基于模板的查询接口，整合了原网络查询功能
 """
 
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.v1.permissions import Permissions
+from app.core.exceptions import BusinessException
 from app.core.permissions.simple_decorators import OperationContext, require_permission
 from app.schemas.base import BaseResponse
+from app.schemas.network_query import (
+    CustomCommandQueryRequest,
+    CustomCommandResult,
+    InterfaceStatusQueryRequest,
+    InterfaceStatusResult,
+    MacQueryRequest,
+    MacQueryResult,
+    NetworkQueryByIPRequest,
+    NetworkQueryRequest,
+    NetworkQueryResponse,
+    NetworkQueryTemplateListRequest,
+    NetworkQueryTemplateListResponse,
+)
 from app.schemas.universal_query import (
     TemplateCommandsPreviewRequest,
     TemplateParametersValidationRequest,
     TemplateQueryRequest,
     TemplateTypeQueryRequest,
 )
+from app.services.network_query import NetworkQueryService
 from app.services.universal_query import UniversalQueryService
+from app.utils.deps import get_network_query_service
 
 router = APIRouter(prefix="/universal-query", tags=["通用查询"])
 
@@ -139,54 +155,6 @@ async def validate_template_parameters(
     return BaseResponse(data=result)
 
 
-@router.get("/stats", summary="获取查询引擎统计信息", response_model=BaseResponse[dict[str, Any]])
-async def get_query_engine_stats(
-    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_ACCESS)),
-) -> BaseResponse[dict[str, Any]]:
-    """
-    获取查询引擎统计信息
-
-    **权限要求**: `system:monitor` - 系统监控权限
-
-    **功能特性**:
-    - 通用查询引擎状态信息
-    - 模板统计信息
-    - 底层Nornir引擎统计
-    - 并发控制状态
-
-    **适用场景**:
-    - 系统监控和运维
-    - 性能分析和优化
-    - 问题诊断和排查
-    """
-    result = await universal_query_service.get_query_engine_stats(operation_context)
-    return BaseResponse(data=result)
-
-
-@router.get("/health", summary="查询引擎健康检查", response_model=BaseResponse[dict[str, Any]])
-async def get_query_engine_health(
-    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_ACCESS)),
-) -> BaseResponse[dict[str, Any]]:
-    """
-    查询引擎健康检查
-
-    **权限要求**: `system:monitor` - 系统监控权限
-
-    **功能特性**:
-    - 整体健康状态评估
-    - 各组件健康状态检查
-    - 数据库连接状态验证
-    - 底层引擎健康状态
-
-    **适用场景**:
-    - 系统健康监控
-    - 负载均衡健康检查
-    - 自动化运维检查
-    """
-    result = await universal_query_service.get_query_engine_health(operation_context)
-    return BaseResponse(data=result)
-
-
 # ===== 便捷查询接口 =====
 
 
@@ -268,3 +236,168 @@ async def execute_config_show_query(
     """
     result = await universal_query_service.execute_config_show_query(device_ids, operation_context, config_section)
     return BaseResponse(data=result)
+
+
+# ===== 从network_query.py迁移的功能 =====
+
+
+@router.post(
+    "/legacy/execute",
+    response_model=BaseResponse[NetworkQueryResponse],
+    summary="执行网络查询（原network_query接口）",
+    description="根据设备ID执行网络查询",
+)
+async def execute_network_query(
+    request: NetworkQueryRequest,
+    service: NetworkQueryService = Depends(get_network_query_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_EXECUTE)),
+) -> BaseResponse[NetworkQueryResponse]:
+    """执行网络查询（原network_query接口）"""
+    try:
+        result = await service.execute_query(request, operation_context)
+        return BaseResponse(data=result)
+    except BusinessException as e:
+        raise BusinessException(detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"网络查询执行失败: {str(e)}",
+        ) from e
+
+
+@router.post(
+    "/legacy/execute-by-ip",
+    response_model=NetworkQueryResponse,
+    summary="根据IP执行网络查询（原network_query接口）",
+    description="根据设备IP地址执行网络查询",
+)
+async def execute_network_query_by_ip(
+    request: NetworkQueryByIPRequest,
+    service: NetworkQueryService = Depends(get_network_query_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_EXECUTE)),
+) -> BaseResponse[NetworkQueryResponse]:
+    """根据IP执行网络查询（原network_query接口）"""
+    try:
+        result = await service.execute_query_by_ip(request, operation_context)
+        return BaseResponse(data=result)
+    except BusinessException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"网络查询执行失败: {str(e)}",
+        ) from e
+
+
+@router.post(
+    "/legacy/mac-query",
+    response_model=BaseResponse[list[MacQueryResult]],
+    summary="MAC地址查询（原network_query接口，已废弃）",
+    description="在指定设备上查询MAC地址信息。建议使用 /mac 接口",
+    deprecated=True,
+)
+async def query_mac_address_legacy(
+    request: MacQueryRequest,
+    service: NetworkQueryService = Depends(get_network_query_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_MAC)),
+) -> BaseResponse[list[MacQueryResult]]:
+    """MAC地址查询（原network_query接口，已废弃）"""
+    try:
+        results = await service.query_mac_address(request, operation_context)
+        return BaseResponse(data=results)
+    except BusinessException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"MAC地址查询失败: {str(e)}",
+        ) from e
+
+
+@router.post(
+    "/legacy/interface-status",
+    response_model=BaseResponse[list[InterfaceStatusResult]],
+    summary="接口状态查询（原network_query接口，已废弃）",
+    description="查询指定设备的接口状态信息。建议使用 /interface-status 接口",
+    deprecated=True,
+)
+async def query_interface_status_legacy(
+    request: InterfaceStatusQueryRequest,
+    service: NetworkQueryService = Depends(get_network_query_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_INTERFACE)),
+) -> BaseResponse[list[InterfaceStatusResult]]:
+    """接口状态查询（原network_query接口，已废弃）"""
+    try:
+        results = await service.query_interface_status(request, operation_context)
+        return BaseResponse(data=results)
+    except BusinessException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"接口状态查询失败: {str(e)}",
+        ) from e
+
+
+@router.post(
+    "/legacy/custom-commands",
+    response_model=BaseResponse[list[CustomCommandResult]],
+    summary="执行自定义命令（原network_query接口）",
+    description="在指定设备上执行自定义命令",
+)
+async def execute_custom_commands_legacy(
+    request: CustomCommandQueryRequest,
+    service: NetworkQueryService = Depends(get_network_query_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_CUSTOM)),
+) -> BaseResponse[list[CustomCommandResult]]:
+    """执行自定义命令（原network_query接口）"""
+    try:
+        results = await service.execute_custom_commands(request, operation_context)
+        return BaseResponse(data=results)
+    except BusinessException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"自定义命令执行失败: {str(e)}",
+        ) from e
+
+
+@router.get(
+    "/legacy/templates",
+    response_model=BaseResponse[NetworkQueryTemplateListResponse],
+    summary="获取可用查询模板（原network_query接口）",
+    description="获取当前用户可用的网络查询模板列表",
+)
+async def get_available_templates_legacy(
+    template_type: str | None = None,
+    service: NetworkQueryService = Depends(get_network_query_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.NETWORK_QUERY_TEMPLATE_LIST)),
+) -> BaseResponse[NetworkQueryTemplateListResponse]:
+    """获取可用查询模板（原network_query接口）"""
+    try:
+        request = NetworkQueryTemplateListRequest(template_type=template_type)
+        result = await service.get_available_templates(request, operation_context)
+        return BaseResponse(data=result)
+    except BusinessException as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取查询模板失败: {str(e)}",
+        ) from e

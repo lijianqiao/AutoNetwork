@@ -12,13 +12,11 @@ from app.api.v1 import (
     admin_dashboard,
     admin_routes,
     auth,
-    authentication,
     cli_terminal,
     device_configs,
     device_connection,
     devices,
     import_export,
-    network_query,
     operation_logs,
     permission_cache,
     permissions,
@@ -26,6 +24,7 @@ from app.api.v1 import (
     query_templates,
     regions,
     roles,
+    statistics,
     universal_query,
     user_relations,
     users,
@@ -39,8 +38,7 @@ api_router = APIRouter()
 
 # 注册各模块路由
 api_router.include_router(auth.router, tags=["认证管理"])
-api_router.include_router(authentication.router, tags=["设备认证管理"])
-api_router.include_router(device_connection.router, tags=["设备连接管理"])
+api_router.include_router(device_connection.router, tags=["设备连接与认证管理"])
 api_router.include_router(users.router, tags=["用户管理"])
 api_router.include_router(roles.router, tags=["角色管理"])
 api_router.include_router(permissions.router, tags=["权限管理"])
@@ -57,10 +55,10 @@ api_router.include_router(vendor_commands.router, tags=["厂商命令管理"])
 api_router.include_router(query_templates.router, tags=["查询模板管理"])
 api_router.include_router(universal_query.router, tags=["通用查询"])
 api_router.include_router(query_history.router, tags=["查询历史管理"])
-api_router.include_router(network_query.router, tags=["网络查询"])
 api_router.include_router(import_export.router, tags=["导入导出"])
 api_router.include_router(cli_terminal.router, tags=["CLI终端"])
 api_router.include_router(web_routes.router, tags=["Web页面"])
+api_router.include_router(statistics.router, tags=["统计模块"])
 
 # 保持向后兼容
 v1_router = api_router

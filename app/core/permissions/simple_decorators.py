@@ -496,6 +496,16 @@ class Permissions:
     # 配置回滚功能
     DEVICE_CONFIG_ROLLBACK = "device_config:rollback"  # 配置回滚权限
 
+    # 统计模块权限
+    STATISTICS_ACCESS = "statistics:access"  # 统计模块访问权限
+    STATISTICS_READ = "statistics:read"  # 统计数据读取权限
+    STATISTICS_DASHBOARD = "statistics:dashboard"  # 统计仪表板查看权限
+    STATISTICS_API_STATS = "statistics:api_stats"  # API统计查看权限
+    STATISTICS_USER_STATS = "statistics:user_stats"  # 用户统计查看权限
+    STATISTICS_DEVICE_STATS = "statistics:device_stats"  # 设备统计查看权限
+    STATISTICS_QUERY_STATS = "statistics:query_stats"  # 查询统计查看权限
+    STATISTICS_SYSTEM_STATS = "statistics:system_stats"  # 系统统计查看权限
+
 
 # ===== 向后兼容函数 =====
 

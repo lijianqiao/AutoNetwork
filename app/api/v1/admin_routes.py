@@ -8,16 +8,15 @@
 
 import platform
 from datetime import datetime
-from typing import Any
 
 import psutil
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 
 from app.core.permissions.simple_decorators import (
     Permissions,
     require_permission,
 )
+from app.schemas.admin import SystemInfoResponse, UsersOverviewResponse
 from app.schemas.base import BaseResponse
 from app.services.role import RoleService
 from app.services.user import UserService
@@ -26,43 +25,6 @@ from app.utils.deps import (
     get_role_service,
     get_user_service,
 )
-
-
-# 响应模型定义
-class SystemInfoResponse(BaseModel):
-    """系统信息响应模型"""
-
-    system: str
-    platform: str
-    python_version: str
-    cpu_count: int
-    memory_total: str
-    memory_available: str
-    memory_percent: float
-    disk_usage: dict[str, Any]
-    uptime: str
-    current_time: str
-
-
-class SystemConfigRequest(BaseModel):
-    """系统配置请求模型"""
-
-    config_key: str
-    config_value: str
-    description: str = ""
-
-
-class UsersOverviewResponse(BaseModel):
-    """用户概览响应模型"""
-
-    total_users: int
-    active_users: int
-    inactive_users: int
-    superusers: int
-    total_roles: int
-    users_by_role: dict[str, int]
-    recent_logins: int  # 最近7天登录用户数
-
 
 # 创建具有路由器级权限控制的路由器
 admin_router = APIRouter(

@@ -4,6 +4,19 @@
 @FileName: user_relations.py
 @DateTime: 2025/07/10
 @Docs: 用户关系管理专用API端点 - 批量操作和复杂查询
+
+职责说明：
+- 用户-角色关系管理（分配、添加、移除用户角色）
+- 用户-权限关系管理（分配、添加、移除用户权限）
+- 批量关系操作（批量分配角色/权限给多个用户）
+- 复杂关系查询（权限汇总、继承关系分析）
+- 关系统计和分析（按角色统计用户、按权限查找用户等）
+
+设计原则：
+- 这是用户关系管理的统一入口，推荐使用本模块的端点
+- 提供单个用户操作和批量操作两种粒度的API
+- 专注于用户与角色、权限之间的关系维护
+- 不处理用户和角色的基本信息CRUD，分别由 users.py 和 roles.py 负责
 """
 
 from uuid import UUID
@@ -17,7 +30,14 @@ from app.core.permissions.simple_decorators import (
 )
 from app.schemas.base import BaseResponse, SuccessResponse
 from app.schemas.dashboard import BatchUserPermissionRequest, BatchUserRoleRequest, UserRolePermissionSummary
-from app.schemas.user import UserResponse
+from app.schemas.user import (
+    UserAssignPermissionsRequest,
+    UserAssignPermissionsResponse,
+    UserAssignRolesRequest,
+    UserAssignRolesResponse,
+    UserListResponseWrapper,
+    UserResponse,
+)
 from app.services.user import UserService
 from app.utils.deps import OperationContext, get_user_service
 
@@ -198,3 +218,120 @@ async def remove_users_from_role(
 #     """检查用户是否拥有指定权限以及获取方式（直接权限还是角色继承）"""
 #     # 需要在服务层实现更完善的权限检查逻辑
 #     pass
+
+
+# ===== 单个用户关系管理端点（统一入口，推荐使用） =====
+
+
+@router.post("/users/{user_id}/roles", response_model=UserAssignRolesResponse, summary="为用户分配角色（统一入口）")
+async def assign_user_roles_unified(
+    user_id: UUID,
+    role_data: UserAssignRolesRequest,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_ROLES)),
+):
+    """为用户分配角色（全量设置）- 统一的用户关系管理入口"""
+    result = await user_service.assign_roles(user_id, role_data.role_ids, operation_context=operation_context)
+    return result
+
+
+@router.post("/users/{user_id}/roles/add", response_model=UserAssignRolesResponse, summary="为用户添加角色（统一入口）")
+async def add_user_roles_unified(
+    user_id: UUID,
+    role_data: UserAssignRolesRequest,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_ROLES)),
+):
+    """为用户增量添加角色 - 统一的用户关系管理入口"""
+    result = await user_service.add_user_roles(user_id, role_data.role_ids, operation_context=operation_context)
+    return result
+
+
+@router.delete(
+    "/users/{user_id}/roles/remove", response_model=UserAssignRolesResponse, summary="移除用户角色（统一入口）"
+)
+async def remove_user_roles_unified(
+    user_id: UUID,
+    role_data: UserAssignRolesRequest,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_ROLES)),
+):
+    """移除用户的指定角色 - 统一的用户关系管理入口"""
+    result = await user_service.remove_user_roles(user_id, role_data.role_ids, operation_context=operation_context)
+    return result
+
+
+@router.get("/users/{user_id}/roles", response_model=UserListResponseWrapper, summary="获取用户角色列表（统一入口）")
+async def get_user_roles_unified(
+    user_id: UUID,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_READ)),
+):
+    """获取用户的角色列表 - 统一的用户关系管理入口"""
+    result = await user_service.get_user_roles(user_id, operation_context=operation_context)
+    return result
+
+
+@router.post(
+    "/users/{user_id}/permissions", response_model=UserAssignPermissionsResponse, summary="为用户设置权限（统一入口）"
+)
+async def assign_user_permissions_unified(
+    user_id: UUID,
+    permission_data: UserAssignPermissionsRequest,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_PERMISSIONS)),
+):
+    """为用户分配直接权限（全量设置）- 统一的用户关系管理入口"""
+    result = await user_service.assign_permissions_to_user(
+        user_id, permission_data, operation_context=operation_context
+    )
+    return result
+
+
+@router.post(
+    "/users/{user_id}/permissions/add",
+    response_model=UserAssignPermissionsResponse,
+    summary="为用户添加权限（统一入口）",
+)
+async def add_user_permissions_unified(
+    user_id: UUID,
+    permission_data: UserAssignPermissionsRequest,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_PERMISSIONS)),
+):
+    """为用户增量添加权限 - 统一的用户关系管理入口"""
+    result = await user_service.add_user_permissions(
+        user_id, permission_data.permission_ids, operation_context=operation_context
+    )
+    return result
+
+
+@router.delete(
+    "/users/{user_id}/permissions/remove",
+    response_model=UserAssignPermissionsResponse,
+    summary="移除用户权限（统一入口）",
+)
+async def remove_user_permissions_unified(
+    user_id: UUID,
+    permission_data: UserAssignPermissionsRequest,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_ASSIGN_PERMISSIONS)),
+):
+    """移除用户的指定权限 - 统一的用户关系管理入口"""
+    result = await user_service.remove_user_permissions(
+        user_id, permission_data.permission_ids, operation_context=operation_context
+    )
+    return result
+
+
+@router.get(
+    "/users/{user_id}/permissions", response_model=UserListResponseWrapper, summary="获取用户权限列表（统一入口）"
+)
+async def get_user_permissions_unified(
+    user_id: UUID,
+    user_service: UserService = Depends(get_user_service),
+    operation_context: OperationContext = Depends(require_permission(Permissions.USER_READ)),
+):
+    """获取用户的直接权限列表 - 统一的用户关系管理入口"""
+    result = await user_service.get_user_permissions(user_id, operation_context=operation_context)
+    return result

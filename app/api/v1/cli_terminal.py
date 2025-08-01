@@ -15,7 +15,7 @@ from app.api.v1.permissions import Permissions
 from app.core.exceptions import BusinessException
 from app.core.permissions.simple_decorators import OperationContext, require_permission
 from app.schemas.base import BaseResponse, SuccessResponse
-from app.schemas.cli import DeviceConnectionConfig, PlatformInfo, SessionInfo, SessionStats, ValidationResult
+from app.schemas.cli import DeviceConnectionConfig, PlatformInfo, SessionInfo, ValidationResult
 from app.services.cli_session import CLISessionService
 from app.utils.deps import get_cli_service
 from app.utils.logger import logger
@@ -259,20 +259,6 @@ async def get_all_sessions(
     except Exception as e:
         logger.error(f"获取所有CLI会话失败: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取会话失败: {e}") from e
-
-
-@router.get("/sessions/stats", response_model=BaseResponse[SessionStats], summary="获取CLI会话统计信息")
-async def get_session_stats(
-    operation_context: OperationContext = Depends(require_permission(Permissions.CLI_ACCESS)),
-    cli_service: CLISessionService = Depends(get_cli_service),
-):
-    """获取CLI会话统计信息"""
-    try:
-        stats = await cli_service.get_session_stats()
-        return BaseResponse(data=stats, message="获取CLI会话统计成功")
-    except Exception as e:
-        logger.error(f"获取CLI会话统计失败: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"获取统计失败: {e}") from e
 
 
 @router.delete("/sessions/{session_id}", response_model=SuccessResponse, summary="关闭指定的CLI会话")

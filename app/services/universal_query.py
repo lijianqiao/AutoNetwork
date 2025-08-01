@@ -223,34 +223,6 @@ class UniversalQueryService(BaseService):
             logger.error(f"获取查询引擎统计信息失败: {e}")
             raise BusinessException(f"获取查询引擎统计信息失败: {e}") from e
 
-    @log_query_with_context("query_engine_health")
-    async def get_query_engine_health(self, operation_context: OperationContext) -> dict[str, Any]:
-        """获取查询引擎健康状态
-
-        Args:
-            operation_context: 操作上下文
-
-        Returns:
-            引擎健康状态信息
-        """
-        try:
-            logger.info(f"用户 {operation_context.user.username} 检查查询引擎健康状态")
-
-            health = await self.query_engine.health_check()
-
-            status = health.get("status", "unknown")
-            logger.info(f"查询引擎健康检查完成，状态: {status}")
-
-            return health
-
-        except Exception as e:
-            logger.error(f"查询引擎健康检查失败: {e}")
-            return {
-                "status": "unhealthy",
-                "error": str(e),
-                "timestamp": None,
-            }
-
     # ===== 便捷方法 =====
 
     async def execute_mac_query(
