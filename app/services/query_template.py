@@ -132,12 +132,18 @@ class QueryTemplateService(BaseService[QueryTemplate]):
             **model_filters,
         )
 
-        # 为每个模板添加命令数量统计
+        # 为每个模板添加命令数量统计 - 优化：批量查询避免N+1问题
         template_responses = []
-        for template in templates:
-            template_data = QueryTemplateResponse.model_validate(template)
-            template_data.command_count = await self.vendor_command_dao.count(template_id=template.id)
-            template_responses.append(template_data)
+        if templates:
+            template_ids = [template.id for template in templates]
+
+            # 批量查询命令数量
+            command_counts = await self.vendor_command_dao.get_count_by_template_ids(template_ids)
+
+            for template in templates:
+                template_data = QueryTemplateResponse.model_validate(template)
+                template_data.command_count = command_counts.get(template.id, 0)
+                template_responses.append(template_data)
 
         return template_responses, total
 

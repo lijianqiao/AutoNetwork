@@ -122,3 +122,73 @@ class VendorCommandDAO(BaseDAO[VendorCommand]):
         except Exception as e:
             logger.error(f"分页获取厂商命令失败: {e}")
             return [], 0
+
+    async def get_count_by_vendor_ids(self, vendor_ids: list[UUID]) -> dict[UUID, int]:
+        """批量获取厂商命令数量统计
+
+        Args:
+            vendor_ids: 厂商ID列表
+
+        Returns:
+            {厂商ID: 命令数量} 的字典
+        """
+        try:
+            from tortoise.functions import Count
+
+            # 使用聚合查询批量获取统计信息
+            stats = (
+                await VendorCommand.filter(vendor_id__in=vendor_ids, deleted_at__isnull=True)
+                .group_by("vendor_id")
+                .annotate(count=Count("id"))
+                .values("vendor_id", "count")
+            )
+
+            # 转换为字典格式
+            result = {stat["vendor_id"]: stat["count"] for stat in stats}
+
+            # 确保所有厂商ID都有对应的值（没有命令的厂商返回0）
+            for vendor_id in vendor_ids:
+                if vendor_id not in result:
+                    result[vendor_id] = 0
+
+            return result
+
+        except Exception as e:
+            logger.error(f"批量获取厂商命令数量失败: {e}")
+            # 返回默认值
+            return dict.fromkeys(vendor_ids, 0)
+
+    async def get_count_by_template_ids(self, template_ids: list[UUID]) -> dict[UUID, int]:
+        """批量获取模板命令数量统计
+
+        Args:
+            template_ids: 模板ID列表
+
+        Returns:
+            {模板ID: 命令数量} 的字典
+        """
+        try:
+            from tortoise.functions import Count
+
+            # 使用聚合查询批量获取统计信息
+            stats = (
+                await VendorCommand.filter(template_id__in=template_ids, deleted_at__isnull=True)
+                .group_by("template_id")
+                .annotate(count=Count("id"))
+                .values("template_id", "count")
+            )
+
+            # 转换为字典格式
+            result = {stat["template_id"]: stat["count"] for stat in stats}
+
+            # 确保所有模板ID都有对应的值（没有命令的模板返回0）
+            for template_id in template_ids:
+                if template_id not in result:
+                    result[template_id] = 0
+
+            return result
+
+        except Exception as e:
+            logger.error(f"批量获取模板命令数量失败: {e}")
+            # 返回默认值
+            return dict.fromkeys(template_ids, 0)

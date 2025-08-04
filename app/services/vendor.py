@@ -30,6 +30,7 @@ from app.utils.operation_logger import (
     log_query_with_context,
     log_update_with_context,
 )
+from app.utils.redis_cache import get_redis_cache
 
 
 class VendorService(BaseService[Vendor]):
@@ -56,6 +57,7 @@ class VendorService(BaseService[Vendor]):
         return data
 
     @log_create_with_context("vendor")
+    @log_create_with_context("vendor")
     async def create_vendor(self, request: VendorCreateRequest, operation_context: OperationContext) -> VendorResponse:
         """创建厂商"""
         create_data = request.model_dump(exclude_unset=True)
@@ -64,6 +66,11 @@ class VendorService(BaseService[Vendor]):
         if not vendor:
             logger.error("厂商创建失败")
             raise BusinessException("厂商创建失败")
+
+        # 清除相关缓存
+        redis_cache = await get_redis_cache()
+        await redis_cache.delete_pattern("vendor:list:*")
+
         return VendorResponse.model_validate(vendor)
 
     @log_update_with_context("vendor")
@@ -84,6 +91,12 @@ class VendorService(BaseService[Vendor]):
         if not updated_vendor:
             logger.error("厂商更新失败或版本冲突")
             raise BusinessException("厂商更新失败或版本冲突")
+
+        # 清除相关缓存
+        redis_cache = await get_redis_cache()
+        await redis_cache.delete_pattern("vendor:list:*")
+        await redis_cache.delete(f"vendor:detail:{vendor_id}")
+
         return VendorResponse.model_validate(updated_vendor)
 
     @log_delete_with_context("vendor")
@@ -112,10 +125,19 @@ class VendorService(BaseService[Vendor]):
     async def get_vendors(
         self, query: VendorListRequest, operation_context: OperationContext
     ) -> tuple[list[VendorResponse], int]:
-        """获取厂商列表"""
+        """获取厂商列表 - 添加缓存优化"""
         from app.utils.query_utils import list_query_to_orm_filters
 
+        # 生成缓存键
         query_dict = query.model_dump(exclude_unset=True)
+        cache_key = f"vendor:list:{hash(str(sorted(query_dict.items())))}"
+
+        # 尝试从缓存获取
+        redis_cache = await get_redis_cache()
+        cached_result = await redis_cache.get(cache_key)
+        if cached_result:
+            logger.debug(f"厂商列表缓存命中: {cache_key}")
+            return cached_result
 
         VENDOR_MODEL_FIELDS = {"vendor_code", "scrapli_platform"}
         search_fields = ["vendor_name", "scrapli_platform"]
@@ -135,15 +157,28 @@ class VendorService(BaseService[Vendor]):
             **model_filters,
         )
 
-        # 为每个厂商添加统计信息
+        # 为每个厂商添加统计信息 - 优化：批量查询避免N+1问题
         vendor_responses = []
-        for vendor in vendors:
-            vendor_data = VendorResponse.model_validate(vendor)
-            vendor_data.device_count = await self.device_dao.count(vendor_id=vendor.id)
-            vendor_data.command_count = await self.vendor_command_dao.count(vendor_id=vendor.id)
-            vendor_responses.append(vendor_data)
+        if vendors:
+            vendor_ids = [vendor.id for vendor in vendors]
 
-        return vendor_responses, total
+            # 批量查询设备数量
+            device_counts = await self.device_dao.get_count_by_vendor_ids(vendor_ids)
+            # 批量查询命令数量
+            command_counts = await self.vendor_command_dao.get_count_by_vendor_ids(vendor_ids)
+
+            for vendor in vendors:
+                vendor_data = VendorResponse.model_validate(vendor)
+                vendor_data.device_count = device_counts.get(vendor.id, 0)
+                vendor_data.command_count = command_counts.get(vendor.id, 0)
+                vendor_responses.append(vendor_data)
+
+        result = (vendor_responses, total)
+
+        # 缓存结果 - 厂商信息相对稳定，缓存5分钟
+        await redis_cache.set(cache_key, result, ttl=300)
+
+        return result
 
     @log_query_with_context("vendor")
     async def get_vendor_detail(self, vendor_id: UUID, operation_context: OperationContext) -> VendorDetailResponse:

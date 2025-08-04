@@ -37,7 +37,8 @@ class VendorCommandService(BaseService[VendorCommand]):
     """厂商命令服务"""
 
     def __init__(self):
-        super().__init__(VendorCommandDAO())
+        self.vendor_command_dao = VendorCommandDAO()
+        super().__init__(self.vendor_command_dao)
         self.vendor_dao = VendorDAO()
         self.query_template_dao = QueryTemplateDAO()
 
@@ -125,22 +126,28 @@ class VendorCommandService(BaseService[VendorCommand]):
         self, params: VendorCommandListRequest, operation_context: OperationContext
     ) -> VendorCommandListResponse:
         """获取厂商命令列表"""
-        # 构建过滤条件
-        filters = {}
-        if hasattr(params, "vendor_id") and params.vendor_id:
-            filters["vendor_id"] = params.vendor_id
-        if hasattr(params, "template_id") and params.template_id:
-            filters["template_id"] = params.template_id
-        if hasattr(params, "is_active") and params.is_active is not None:
-            filters["is_active"] = params.is_active
-
-        # 查询数据
-        commands = await self.get_all(**filters)
-        total = await self.count(**filters)
-
-        return VendorCommandListResponse(
-            data=[VendorCommandResponse.model_validate(cmd) for cmd in commands], total=total
+        # 使用DAO的优化分页查询方法，确保加载关联数据
+        commands, total = await self.vendor_command_dao.get_commands_paginated_optimized(
+            page=getattr(params, "page", 1),
+            page_size=getattr(params, "page_size", 10),
+            template_id=getattr(params, "template_id", None),
+            vendor_id=getattr(params, "vendor_id", None),
         )
+
+        # 确保关联对象已正确加载
+        response_data = []
+        for cmd in commands:
+            try:
+                # 直接使用 model_validate，如果关联数据正确加载，这应该工作
+                response_data.append(VendorCommandResponse.model_validate(cmd))
+            except Exception as e:
+                logger.warning(f"模型验证失败，尝试重新加载命令详情: {e}")
+                # 如果验证失败，重新获取详细信息
+                detailed_cmd = await self.vendor_command_dao.get_command_with_details(cmd.id)
+                if detailed_cmd:
+                    response_data.append(VendorCommandResponse.model_validate(detailed_cmd))
+
+        return VendorCommandListResponse(data=response_data, total=total)
 
     @log_query_with_context("vendor_command")
     async def get_vendor_command_by_id(
