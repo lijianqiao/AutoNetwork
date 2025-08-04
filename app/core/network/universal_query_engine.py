@@ -345,7 +345,7 @@ class UniversalQueryEngine:
             # 处理每个厂商的命令
             for vendor_command in vendor_commands:
                 # 获取关联的厂商信息
-                vendor = await vendor_command.vendor
+                vendor = vendor_command.vendor
                 if not vendor:
                     continue
 
@@ -429,7 +429,7 @@ class UniversalQueryEngine:
 
             # 验证每个厂商的命令参数
             for vendor_command in vendor_commands:
-                vendor = await vendor_command.vendor
+                vendor = vendor_command.vendor
                 if not vendor:
                     continue
 
@@ -523,9 +523,8 @@ class UniversalQueryEngine:
         # 获取设备的厂商列表
         vendor_ids = set()
         for device in devices:
-            vendor = await device.vendor
-            if vendor:
-                vendor_ids.add(vendor.id)
+            if device.vendor:
+                vendor_ids.add(device.vendor.id)
 
         if not vendor_ids:
             raise BusinessException("设备缺少厂商信息")

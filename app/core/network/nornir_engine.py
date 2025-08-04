@@ -298,7 +298,7 @@ class NornirQueryEngine:
                 # 按厂商分组执行查询
                 vendor_groups = {}
                 for device in devices:
-                    vendor = await device.vendor
+                    vendor = device.vendor
                     if vendor:
                         if vendor.id not in vendor_groups:
                             vendor_groups[vendor.id] = {"vendor": vendor, "devices": []}
@@ -486,7 +486,7 @@ class NornirQueryEngine:
                 return []
 
             device = devices[0]
-            vendor = await device.vendor
+            vendor = device.vendor
             if not vendor:
                 return []
 

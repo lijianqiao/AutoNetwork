@@ -30,7 +30,14 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
         Returns:
             设备对象或None
         """
-        return await super().get_by_id(id, include_deleted)
+        try:
+            if include_deleted:
+                return await self.model.filter(id=id).prefetch_related("vendor", "region").first()
+            else:
+                return await self.model.filter(id=id, is_deleted=False).prefetch_related("vendor", "region").first()
+        except Exception as e:
+            logger.error(f"获取设备失败: {e}")
+            return None
 
     async def get_by_ids(self, ids: list[UUID]) -> list[Device]:
         """根据设备ID列表获取设备
@@ -41,7 +48,11 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
         Returns:
             设备对象列表
         """
-        return await super().get_by_ids(ids)
+        try:
+            return await self.model.filter(id__in=ids, is_deleted=False).prefetch_related("vendor", "region").all()
+        except Exception as e:
+            logger.error(f"根据ID列表获取设备失败: {e}")
+            return []
 
     async def get_all(self, include_deleted: bool = True, **filters) -> list[Device]:
         """获取所有设备
@@ -100,7 +111,12 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
     async def get_active_devices(self) -> list[Device]:
         """获取所有在用的设备"""
         try:
-            return await self.model.filter(is_active=True, is_deleted=False).order_by("hostname").all()
+            return (
+                await self.model.filter(is_active=True, is_deleted=False)
+                .prefetch_related("vendor", "region")
+                .order_by("hostname")
+                .all()
+            )
         except Exception as e:
             logger.error(f"获取在用设备失败: {e}")
             return []
@@ -128,7 +144,7 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
             if is_active is not None:
                 filters["is_active"] = is_active
 
-            queryset = self.model.filter(**filters)
+            queryset = self.model.filter(**filters).prefetch_related("vendor", "region")
 
             if keyword:
                 from tortoise.expressions import Q
@@ -148,7 +164,11 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
     async def get_devices_by_vendor(self, vendor_id: UUID) -> list[Device]:
         """根据厂商获取设备列表"""
         try:
-            return await self.model.filter(vendor_id=vendor_id, is_deleted=False).all()
+            return (
+                await self.model.filter(vendor_id=vendor_id, is_deleted=False)
+                .prefetch_related("vendor", "region")
+                .all()
+            )
         except Exception as e:
             logger.error(f"根据厂商获取设备失败: {e}")
             return []
@@ -156,7 +176,11 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
     async def get_devices_by_region(self, region_id: UUID) -> list[Device]:
         """根据基地获取设备列表"""
         try:
-            return await self.model.filter(region_id=region_id, is_deleted=False).all()
+            return (
+                await self.model.filter(region_id=region_id, is_deleted=False)
+                .prefetch_related("vendor", "region")
+                .all()
+            )
         except Exception as e:
             logger.error(f"根据基地获取设备失败: {e}")
             return []
@@ -256,7 +280,7 @@ class DeviceDAO(BaseDAO[Device], IDeviceDAO):
 
             # 使用聚合查询批量获取统计信息
             stats = (
-                await Device.filter(vendor_id__in=vendor_ids, deleted_at__isnull=True)
+                await Device.filter(vendor_id__in=vendor_ids, is_deleted=False)
                 .group_by("vendor_id")
                 .annotate(count=Count("id"))
                 .values("vendor_id", "count")

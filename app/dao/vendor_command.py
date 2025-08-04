@@ -22,7 +22,11 @@ class VendorCommandDAO(BaseDAO[VendorCommand]):
     async def get_by_template_and_vendor(self, template_id: UUID, vendor_id: UUID) -> VendorCommand | None:
         """根据模板和厂商获取命令"""
         try:
-            return await self.model.get_or_none(template_id=template_id, vendor_id=vendor_id, is_deleted=False)
+            return (
+                await self.model.filter(template_id=template_id, vendor_id=vendor_id, is_deleted=False)
+                .select_related("template", "vendor")
+                .first()
+            )
         except Exception as e:
             logger.error(f"根据模板和厂商获取命令失败: {e}")
             return None
@@ -30,7 +34,11 @@ class VendorCommandDAO(BaseDAO[VendorCommand]):
     async def get_by_template(self, template_id: UUID) -> list[VendorCommand]:
         """根据模板获取所有厂商命令"""
         try:
-            return await self.model.filter(template_id=template_id, is_deleted=False).all()
+            return (
+                await self.model.filter(template_id=template_id, is_deleted=False)
+                .select_related("template", "vendor")
+                .all()
+            )
         except Exception as e:
             logger.error(f"根据模板获取命令失败: {e}")
             return []
@@ -38,7 +46,11 @@ class VendorCommandDAO(BaseDAO[VendorCommand]):
     async def get_by_vendor(self, vendor_id: UUID) -> list[VendorCommand]:
         """根据厂商获取所有命令"""
         try:
-            return await self.model.filter(vendor_id=vendor_id, is_deleted=False).all()
+            return (
+                await self.model.filter(vendor_id=vendor_id, is_deleted=False)
+                .select_related("template", "vendor")
+                .all()
+            )
         except Exception as e:
             logger.error(f"根据厂商获取命令失败: {e}")
             return []
@@ -137,7 +149,7 @@ class VendorCommandDAO(BaseDAO[VendorCommand]):
 
             # 使用聚合查询批量获取统计信息
             stats = (
-                await VendorCommand.filter(vendor_id__in=vendor_ids, deleted_at__isnull=True)
+                await VendorCommand.filter(vendor_id__in=vendor_ids, is_deleted=False)
                 .group_by("vendor_id")
                 .annotate(count=Count("id"))
                 .values("vendor_id", "count")
@@ -172,7 +184,7 @@ class VendorCommandDAO(BaseDAO[VendorCommand]):
 
             # 使用聚合查询批量获取统计信息
             stats = (
-                await VendorCommand.filter(template_id__in=template_ids, deleted_at__isnull=True)
+                await VendorCommand.filter(template_id__in=template_ids, is_deleted=False)
                 .group_by("template_id")
                 .annotate(count=Count("id"))
                 .values("template_id", "count")

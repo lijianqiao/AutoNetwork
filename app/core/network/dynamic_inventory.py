@@ -126,6 +126,7 @@ class DynamicInventoryBuilder:
 
     async def _build_host(self, device: Device, vendors: list[Vendor], regions: list[Region]) -> Host | None:
         """构建单个主机对象"""
+        logger.info(f"开始执行_build_host方法构建主机 {device.hostname}")
         try:
             # 获取厂商信息
             vendor = next((v for v in vendors if v.id == device.vendor.id), None)
@@ -189,22 +190,13 @@ class DynamicInventoryBuilder:
             return None
 
     async def _build_connection_options(self, device: Device, vendor: Vendor) -> dict[str, Any]:
-        """构建连接选项"""
+        """构建连接选项 - 简化配置，实际连接由DeviceConnectionManager处理"""
         return {
             "scrapli": {
                 "platform": vendor.scrapli_platform,
-                "transport": "ssh2",
-                "transport_options": {
-                    "open_cmd": ["-o", "KexAlgorithms=+diffie-hellman-group1-sha1"],
-                },
-                "timeout_socket": vendor.connection_timeout,
-                "timeout_transport": vendor.connection_timeout,
+                # 注意：实际的连接将由DeviceConnectionManager统一管理
+                # 这里只提供基本的平台信息和超时配置
                 "timeout_ops": vendor.command_timeout,
-                "comms_prompt_pattern": r"^[a-zA-Z0-9.\-_\[\]<>]+[#>]\s*$",
-                "comms_return_char": "\n",
-                "ssh_config_file": False,
-                "auth_strict_key": False,
-                "auth_bypass": False,
             }
         }
 

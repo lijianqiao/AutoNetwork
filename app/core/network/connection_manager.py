@@ -321,7 +321,7 @@ class DeviceConnectionManager(IConnectionProvider):
             credentials = await self.auth_provider.get_device_credentials(device.id, dynamic_password)
 
             # 获取厂商信息
-            vendor = await device.vendor
+            vendor = device.vendor
             if not vendor:
                 raise NetworkException(f"设备 {device.hostname} 缺少厂商信息")
 
