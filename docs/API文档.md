@@ -511,38 +511,38 @@ OAuth2表单登录接口，适用于Swagger UI。
 - `template`: 基于查询模板
 - `template_type`: 基于模板类型
 - `mac_address`: MAC地址查询
-- `interface_status`: 接口状态查�?
-- `custom_command`: 自定义命�?
+- `interface_status`: 接口状态查询
+- `custom_command`: 自定义命令
 
 ### 11.2 MAC地址查询
 
 **POST** `/network-query/mac-address`
 
-MAC地址查询�?
+MAC地址查询。
 
-### 11.3 接口状态查�?
+### 11.3 接口状态查询
 
 **POST** `/network-query/interface-status`
 
-接口状态查询�?
+接口状态查询。
 
-### 11.4 自定义命令查�?
+### 11.4 自定义命令查询
 
 **POST** `/network-query/custom-command`
 
-执行自定义命令�?
+执行自定义命令。
 
 ### 11.5 获取查询结果
 
 **GET** `/network-query/results/{query_id}`
 
-获取查询结果详情�?
+获取查询结果详情。
 
 ### 11.6 获取可用模板
 
 **GET** `/network-query/templates/available`
 
-获取当前用户可用的查询模板列表�?
+获取当前用户可用的查询模板列表。
 
 ---
 
@@ -552,31 +552,31 @@ MAC地址查询�?
 
 **GET** `/query-templates`
 
-获取查询模板列表�?
+获取查询模板列表。
 
 ### 12.2 创建查询模板
 
 **POST** `/query-templates`
 
-创建新的查询模板�?
+创建新的查询模板。
 
 ### 12.3 更新查询模板
 
 **PUT** `/query-templates/{template_id}`
 
-更新查询模板�?
+更新查询模板。
 
 ### 12.4 删除查询模板
 
 **DELETE** `/query-templates/{template_id}`
 
-删除查询模板�?
+删除查询模板。
 
 ### 12.5 获取模板类型
 
 **GET** `/query-templates/types`
 
-获取所有可用的模板类型�?
+获取所有可用的模板类型。
 
 ---
 
@@ -586,25 +586,25 @@ MAC地址查询�?
 
 **GET** `/query-history`
 
-获取查询历史记录列表�?
+获取查询历史记录列表。
 
 ### 13.2 获取查询历史详情
 
 **GET** `/query-history/{history_id}`
 
-获取查询历史详细信息�?
+获取查询历史详细信息。
 
 ### 13.3 删除查询历史
 
 **DELETE** `/query-history/{history_id}`
 
-删除指定的查询历史记录�?
+删除指定的查询历史记录。
 
 ### 13.4 导出查询历史
 
 **POST** `/query-history/export`
 
-导出查询历史为Excel文件�?
+导出查询历史为Excel文件。
 
 ---
 
@@ -614,25 +614,25 @@ MAC地址查询�?
 
 **GET** `/device-configs`
 
-获取设备配置列表�?
+获取设备配置列表。
 
 ### 14.2 获取设备配置详情
 
 **GET** `/device-configs/{config_id}`
 
-获取设备配置详细信息�?
+获取设备配置详细信息。
 
 ### 14.3 创建设备配置
 
 **POST** `/device-configs`
 
-创建新的设备配置记录�?
+创建新的设备配置记录。
 
 ### 14.4 备份设备配置
 
 **POST** `/device-configs/device/{device_id}/backup`
 
-备份指定设备的配置�?
+备份指定设备的配置。
 
 ---
 
@@ -715,25 +715,25 @@ MAC地址查询�?
 
 **GET** `/operation-logs`
 
-获取操作日志列表�?
+获取操作日志列表。
 
 ### 17.2 获取操作日志详情
 
 **GET** `/operation-logs/{log_id}`
 
-获取操作日志详细信息�?
+获取操作日志详细信息。
 
 ### 17.3 导出操作日志
 
 **POST** `/operation-logs/export`
 
-导出操作日志为Excel文件�?
+导出操作日志为Excel文件。
 
 ### 17.4 获取操作统计
 
 **GET** `/operation-logs/statistics`
 
-获取操作日志统计信息�?
+获取操作日志统计信息。
 
 ---
 
@@ -743,19 +743,19 @@ MAC地址查询�?
 
 **POST** `/permission-cache/refresh`
 
-刷新权限缓存�?
+刷新权限缓存。
 
 ### 18.2 清空权限缓存
 
 **DELETE** `/permission-cache/clear`
 
-清空权限缓存�?
+清空权限缓存。
 
 ### 18.3 获取缓存统计
 
 **GET** `/permission-cache/stats`
 
-获取权限缓存统计信息�?
+获取权限缓存统计信息。
 
 ---
 
@@ -765,7 +765,7 @@ MAC地址查询�?
 
 **GET** `/statistics/overall`
 
-获取系统整体统计信息�?
+获取系统整体统计信息。
 
 **查询参数**:
 - `period`: 统计周期 (day/week/month/year)
@@ -812,35 +812,35 @@ MAC地址查询�?
 
 **GET** `/statistics/api`
 
-获取API调用统计信息�?
+获取API调用统计信息。
 
 ### 19.3 获取模块统计
 
 **GET** `/statistics/modules`
 
-获取各模块使用统计�?
+获取各模块使用统计。
 
-### 19.4 获取仪表板统�?
+### 19.4 获取仪表板统计
 
 **GET** `/statistics/dashboard`
 
-获取仪表板统计数据�?
+获取仪表板统计数据。
 
 ---
 
 ## 20. 后台管理
 
-### 20.1 获取仪表板数�?
+### 20.1 获取仪表板数据
 
 **GET** `/admin/dashboard`
 
-获取管理员仪表板数据�?
+获取管理员仪表板数据。
 
-### 20.2 管理员专用路�?
+### 20.2 管理员专用路由
 
 **GET** `/admin/users/statistics` - 用户统计  
 **GET** `/admin/devices/statistics` - 设备统计  
-**GET** `/admin/system/health` - 系统健康检�? 
+**GET** `/admin/system/health` - 系统健康检查 
 **POST** `/admin/system/maintenance` - 系统维护操作
 
 ---
@@ -851,19 +851,19 @@ MAC地址查询�?
 
 **GET** `/web/cli-terminal`
 
-获取CLI终端页面（需要认证）�?
+获取CLI终端页面（需要认证）。
 
 ### 21.2 简化版CLI终端
 
 **GET** `/web/cli-terminal-simple`
 
-获取简化版CLI终端页面�?
+获取简化版CLI终端页面。
 
 ### 21.3 测试页面
 
 **GET** `/web/cli-terminal-test`
 
-获取无需认证的CLI终端测试页面�?
+获取无需认证的CLI终端测试页面。
 
 ---
 
