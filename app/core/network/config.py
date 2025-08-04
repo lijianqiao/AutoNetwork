@@ -101,7 +101,7 @@ class ConnectionPoolConfig(BaseModel):
 
     # 连接池大小 - 优化：动态调整，支持高并发
     MAX_POOL_SIZE: int = Field(default=200, ge=50, le=500)  # 增加到200，支持更高并发
-    MIN_POOL_SIZE: int = Field(default=10, ge=5, le=50)     # 增加到10，保持基础连接
+    MIN_POOL_SIZE: int = Field(default=10, ge=5, le=50)  # 增加到10，保持基础连接
 
     # 连接生命周期（秒）- 优化：平衡性能和资源占用
     MAX_CONNECTION_LIFETIME: int = Field(default=3600, ge=1800, le=14400)  # 1小时，减少频繁重建
@@ -223,9 +223,6 @@ class MonitoringConfig(BaseModel):
 
 class SecurityConfig(BaseModel):
     """安全配置"""
-
-    # 是否启用连接加密
-    ENABLE_CONNECTION_ENCRYPTION: bool = Field(default=False)
 
     # 是否记录敏感信息（密码等）
     LOG_SENSITIVE_INFO: bool = Field(default=False)

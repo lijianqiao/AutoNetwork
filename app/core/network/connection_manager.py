@@ -71,10 +71,41 @@ class DeviceConnection:
         async with self._lock:
             try:
                 if not self.is_connected:
-                    await self.connection.open()
+                    logger.info(f"开始连接设备 {self.hostname}({self.ip_address})")
+                    logger.debug(f"设备 {self.hostname} 连接配置: platform={self.platform}, vendor={self.vendor}")
+                    logger.debug(
+                        f"设备 {self.hostname} SSH参数: port={self.credentials.ssh_port}, username={self.credentials.username}"
+                    )
+
+                    # 设置超时控制，防止连接卡死
+                    connect_timeout = network_config.connection.CONNECT_TIMEOUT
+                    logger.debug(f"设备 {self.hostname} 开始SSH连接，超时: {connect_timeout}秒")
+
+                    try:
+                        # 使用更短的超时时间，避免长时间等待
+                        await asyncio.wait_for(self.connection.open(), timeout=connect_timeout)
+
+                        # 连接成功后立即测试
+                        logger.debug(f"设备 {self.hostname} SSH连接建立，正在验证...")
+                        # 使用适合HP Comware的轻量验证命令
+                        test_command = "display clock" if "comware" in self.platform.lower() else "show clock"
+                        await asyncio.wait_for(self.connection.send_command(test_command, timeout_ops=5), timeout=8)
+                        logger.info(f"设备 {self.hostname} SSH连接建立成功")
+
+                    except TimeoutError:
+                        logger.error(f"设备 {self.hostname} 连接超时 ({connect_timeout}秒)")
+                        raise ConnectionError(f"连接超时 ({connect_timeout}秒)") from None
+                    except Exception as e:
+                        logger.error(f"设备 {self.hostname} 连接验证失败: {e}")
+                        # 尝试关闭可能的部分连接
+                        try:
+                            await self.connection.close()
+                        except Exception:
+                            pass
+                        raise ConnectionError(f"连接验证失败: {e}") from e
+
                     self.is_connected = True
                     self.retry_count = 0
-                    logger.info(f"设备 {self.hostname} 连接成功")
                 return True
             except Exception as e:
                 self.is_connected = False
@@ -83,8 +114,11 @@ class DeviceConnection:
                     "username": self.credentials.username,
                     "auth_type": self.credentials.auth_type,
                     "ssh_port": self.credentials.ssh_port,
+                    "platform": self.platform,
+                    "vendor": self.vendor,
                 }
-                logger.error(f"设备 {self.hostname} 连接失败: {e}, 认证参数: {auth_details}")
+                logger.error(f"设备 {self.hostname}({self.ip_address}) 连接失败: {e}, 认证参数: {auth_details}")
+                logger.debug(f"连接失败详细信息: {type(e).__name__}: {str(e)}")
                 return False
 
     async def disconnect(self) -> None:
@@ -166,7 +200,9 @@ class DeviceConnection:
             check_interval = network_config.connection_pool.HEALTH_CHECK_INTERVAL
             if (now - self._last_health_check).total_seconds() > check_interval:
                 try:
-                    await self.execute_command("show version | include uptime", timeout=10)
+                    # 使用适合平台的健康检查命令
+                    health_cmd = "display clock" if "comware" in self.platform.lower() else "show clock"
+                    await self.execute_command(health_cmd, timeout=10)
                     self._last_health_check = now
                 except Exception:
                     self.is_connected = False
@@ -292,24 +328,60 @@ class DeviceConnectionManager(IConnectionProvider):
             # 确定Scrapli平台
             platform = self._get_scrapli_platform(vendor)
 
-            # 创建优化的Scrapli连接配置
+            # 创建针对大规模并发优化的异步Scrapli连接配置
             scrapli_config = {
                 "host": device.ip_address,
                 "auth_username": credentials.username,
                 "auth_password": credentials.password,
-                "auth_strict_key": network_config.security.ENABLE_CONNECTION_ENCRYPTION,
-                "ssh_config_file": network_config.connection.SSH_CONFIG_FILE,
-                "timeout_socket": network_config.connection.CONNECT_TIMEOUT,
-                "timeout_transport": network_config.connection.CONNECT_TIMEOUT,
+                "auth_strict_key": False,  # 禁用严格密钥检查，提高连接成功率
                 "port": credentials.ssh_port,
                 "platform": platform,
-                "transport": "asyncssh",  # 使用asyncssh传输层
-                "timeout_ops": network_config.connection.COMMAND_TIMEOUT,
+                "transport": "asyncssh",  # 使用完全异步的asyncssh传输层
+                "ssh_config_file": False,  # 禁用ssh配置文件以提高性能
+                # 移除固定的timeout_ops，让每次命令执行时动态设置
                 "transport_options": {
-                    "known_hosts": None,  # 禁用known_hosts检查，提高连接速度
-                    "server_host_key_algs": [],  # 禁用服务器主机密钥算法检查
-                    "client_keys": [],  # 不使用客户端密钥
-                    "compression_algs": [],  # 禁用压缩，减少CPU开销
+                    # AsyncSSH连接超时配置 - 根据scrapli文档要求
+                    "connect_timeout": network_config.connection.CONNECT_TIMEOUT,
+                    "login_timeout": 20,  # 设置登录超时
+                    # 认证配置
+                    "known_hosts": None,  # 跳过主机密钥检查，提高连接速度
+                    "client_keys": None,  # 不使用客户端密钥，简化认证
+                    "preferred_auth": ["password"],  # 仅使用密码认证，最快
+                    # SSH算法配置 - 针对HP Comware等设备优化
+                    "encryption_algs": [
+                        "aes128-ctr",
+                        "aes192-ctr",
+                        "aes256-ctr",
+                        "aes128-cbc",
+                        "aes192-cbc",
+                        "aes256-cbc",  # 兼容老设备
+                        "3des-cbc",  # 极老设备支持
+                    ],
+                    "kex_algs": [
+                        "diffie-hellman-group14-sha256",
+                        "diffie-hellman-group-exchange-sha256",
+                        "ecdh-sha2-nistp256",
+                        "diffie-hellman-group14-sha1",  # 老设备支持
+                        "diffie-hellman-group1-sha1",  # 极老设备支持
+                    ],
+                    "mac_algs": [
+                        "hmac-sha2-256",
+                        "hmac-sha2-512",
+                        "hmac-sha1",  # 老设备支持
+                        "hmac-md5",  # 极老设备支持
+                    ],
+                    "server_host_key_algs": [
+                        "ssh-rsa",
+                        "rsa-sha2-256",
+                        "rsa-sha2-512",
+                        "ssh-dss",  # 老设备支持
+                    ],
+                    # 性能优化
+                    "compression_algs": None,  # 禁用压缩，减少CPU开销
+                    "keepalive_interval": 0,  # 禁用keepalive，减少网络开销
+                    # AsyncSSH特定选项
+                    "agent_path": None,  # 不使用SSH代理
+                    "tunnel": None,  # 不使用隧道
                 },
             }
 
@@ -327,6 +399,17 @@ class DeviceConnectionManager(IConnectionProvider):
             )
 
             logger.info(f"为设备 {device.hostname} 创建连接，平台: {platform}")
+
+            # 立即建立连接，避免在命令执行时才连接导致超时
+            logger.debug(f"设备 {device.hostname} 开始建立SSH连接")
+            if not await connection.connect():
+                raise DeviceConnectionException(
+                    device_info=f"{device.hostname}({device.ip_address})",
+                    message="设备连接建立失败",
+                    detail={"platform": platform},
+                )
+            logger.info(f"设备 {device.hostname} SSH连接建立成功")
+
             return connection
 
         except Exception as e:
@@ -598,6 +681,66 @@ class DeviceConnectionManager(IConnectionProvider):
         self, device: Device, command: str, dynamic_password: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
         """在设备上执行命令"""
+        start_time = datetime.now()
+
+        try:
+            # 获取命令超时时间
+            cmd_timeout = timeout or network_config.connection.COMMAND_TIMEOUT
+
+            # 检查连接是否已存在
+            existing_connection = self.connections.get(device.id)
+            needs_new_connection = not existing_connection or not await existing_connection.is_alive()
+
+            # 设置总超时时间：如果需要新连接则加上连接超时，否则只使用命令超时
+            if needs_new_connection:
+                total_timeout = cmd_timeout + network_config.connection.CONNECT_TIMEOUT
+                logger.debug(f"设备 {device.hostname} 需要建立新连接，总超时: {total_timeout}秒")
+            else:
+                total_timeout = cmd_timeout + 5  # 为现有连接预留5秒缓冲时间
+                logger.debug(f"设备 {device.hostname} 使用现有连接，总超时: {total_timeout}秒")
+
+            # 使用asyncio.wait_for包装整个操作，防止卡死
+            result = await asyncio.wait_for(
+                self._execute_command_with_connection(device, command, dynamic_password, timeout), timeout=total_timeout
+            )
+            return result
+
+        except TimeoutError:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            cmd_timeout = timeout or network_config.connection.COMMAND_TIMEOUT
+            error_msg = f"命令执行超时 ({cmd_timeout}秒)"
+            logger.error(f"设备 {device.hostname} {error_msg}，实际执行时间: {execution_time:.2f}秒")
+
+            return {
+                "success": False,
+                "execution_time": execution_time,
+                "command": command,
+                "response": None,
+                "error_message": error_msg,
+                "device_info": {
+                    "hostname": device.hostname,
+                    "ip_address": device.ip_address,
+                },
+            }
+        except Exception as e:
+            execution_time = (datetime.now() - start_time).total_seconds()
+
+            return {
+                "success": False,
+                "execution_time": execution_time,
+                "command": command,
+                "response": None,
+                "error_message": str(e),
+                "device_info": {
+                    "hostname": device.hostname,
+                    "ip_address": device.ip_address,
+                },
+            }
+
+    async def _execute_command_with_connection(
+        self, device: Device, command: str, dynamic_password: str | None = None, timeout: int | None = None
+    ) -> dict[str, Any]:
+        """执行命令的内部方法"""
         start_time = datetime.now()
 
         try:

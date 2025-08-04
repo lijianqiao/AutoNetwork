@@ -28,6 +28,15 @@ class UnifiedQueryRequest(BaseModel):
     enable_parsing: bool = Field(default=True, description="是否启用结果解析")
     custom_template: str | None = Field(default=None, description="自定义TextFSM模板名称")
 
+    # 认证相关参数
+    dynamic_passwords: dict[UUID, str] | None = Field(
+        default=None, description="动态密码映射表，键为设备ID，值为对应的动态密码（仅对auth_type='dynamic'的设备必需）"
+    )
+    region_passwords: dict[UUID, str] | None = Field(
+        default=None,
+        description="区域级动态密码映射表，键为区域ID（UUID），值为对应的动态密码（优先级高于设备级密码）",
+    )
+
     # 执行参数
     timeout: int = Field(default=30, description="查询超时(秒)", ge=5, le=300)
     max_concurrent: int = Field(default=10, description="最大并发数", ge=1, le=50)
@@ -75,6 +84,13 @@ class MacQueryConvenienceRequest(BaseModel):
     mac_address: str = Field(description="要查询的MAC地址", min_length=12, max_length=17)
     enable_parsing: bool = Field(default=True, description="是否启用结果解析")
     timeout: int = Field(default=30, description="查询超时(秒)", ge=5, le=300)
+    dynamic_passwords: dict[UUID, str] | None = Field(
+        default=None, description="动态密码映射表，键为设备ID，值为对应的动态密码（仅对auth_type='dynamic'的设备必需）"
+    )
+    region_passwords: dict[UUID, str] | None = Field(
+        default=None,
+        description="区域级动态密码映射表，键为区域ID（UUID），值为对应的动态密码（优先级高于设备级密码）",
+    )
 
     def to_unified_request(self) -> UnifiedQueryRequest:
         """转换为统一查询请求"""
@@ -84,6 +100,8 @@ class MacQueryConvenienceRequest(BaseModel):
             parameters={"mac_address": self.mac_address},
             enable_parsing=self.enable_parsing,
             timeout=self.timeout,
+            dynamic_passwords=self.dynamic_passwords,
+            region_passwords=self.region_passwords,
         )
 
 
@@ -94,6 +112,13 @@ class InterfaceStatusQueryConvenienceRequest(BaseModel):
     interface_pattern: str | None = Field(default=None, description="接口模式（可选）")
     enable_parsing: bool = Field(default=True, description="是否启用结果解析")
     timeout: int = Field(default=30, description="查询超时(秒)", ge=5, le=300)
+    dynamic_passwords: dict[UUID, str] | None = Field(
+        default=None, description="动态密码映射表，键为设备ID，值为对应的动态密码（仅对auth_type='dynamic'的设备必需）"
+    )
+    region_passwords: dict[UUID, str] | None = Field(
+        default=None,
+        description="区域级动态密码映射表，键为区域ID（UUID），值为对应的动态密码（优先级高于设备级密码）",
+    )
 
     def to_unified_request(self) -> UnifiedQueryRequest:
         """转换为统一查询请求"""
@@ -107,6 +132,8 @@ class InterfaceStatusQueryConvenienceRequest(BaseModel):
             parameters=parameters if parameters else None,
             enable_parsing=self.enable_parsing,
             timeout=self.timeout,
+            dynamic_passwords=self.dynamic_passwords,
+            region_passwords=self.region_passwords,
         )
 
 
@@ -117,6 +144,13 @@ class CustomCommandQueryConvenienceRequest(BaseModel):
     command: str = Field(description="要执行的命令", min_length=1, max_length=500)
     enable_parsing: bool = Field(default=False, description="是否启用结果解析")
     timeout: int = Field(default=30, description="查询超时(秒)", ge=5, le=300)
+    dynamic_passwords: dict[UUID, str] | None = Field(
+        default=None, description="动态密码映射表，键为设备ID，值为对应的动态密码（仅对auth_type='dynamic'的设备必需）"
+    )
+    region_passwords: dict[UUID, str] | None = Field(
+        default=None,
+        description="区域级动态密码映射表，键为区域ID（UUID），值为对应的动态密码（优先级高于设备级密码）",
+    )
 
     def to_unified_request(self) -> UnifiedQueryRequest:
         """转换为统一查询请求"""
@@ -126,6 +160,8 @@ class CustomCommandQueryConvenienceRequest(BaseModel):
             parameters={"command": self.command},
             enable_parsing=self.enable_parsing,
             timeout=self.timeout,
+            dynamic_passwords=self.dynamic_passwords,
+            region_passwords=self.region_passwords,
         )
 
 

@@ -52,6 +52,15 @@ async def execute_unified_query(
     - 支持并发查询和超时控制
     - 自动记录查询历史和操作日志
     - 完整的错误处理和异常报告
+    - **支持动态密码认证**：对于auth_type='dynamic'的设备，可通过dynamic_passwords字段提供密码
+
+    **动态密码认证说明**:
+    - 系统中98%的设备使用动态密码认证(auth_type='dynamic')，2%使用静态密码(auth_type='static')
+    - 支持两种密码映射方式：
+      - **设备级密码**: dynamic_passwords格式：{"设备UUID": "密码"}
+      - **区域级密码**: region_passwords格式：{"区域UUID": "密码"}（优先级更高）
+    - 区域级密码优先级高于设备级密码，系统会自动根据设备的region_id查找对应密码
+    - 静态密码设备无需提供密码，系统自动从数据库获取
 
     **使用示例**:
     ```json
@@ -59,6 +68,9 @@ async def execute_unified_query(
         "query_type": "mac_address",
         "device_ids": ["uuid1", "uuid2"],
         "parameters": {"mac_address": "00:11:22:33:44:55"},
+        "region_passwords": {
+            "region-uuid-1": "区域密码"
+        },
         "timeout": 30,
         "max_concurrent": 10
     }
@@ -148,11 +160,31 @@ async def execute_custom_command_query(
     - 在指定设备上执行自定义命令
     - 原始命令输出返回
     - 支持超时控制和并发限制
+    - **支持动态密码认证**：对于auth_type='dynamic'的设备，可通过dynamic_passwords字段提供密码
 
     **适用场景**:
     - 临时故障排查
     - 特殊命令执行
     - 设备配置检查
+
+    **动态密码说明**:
+    - 支持两种密码映射方式：
+      - **设备级密码**: 在dynamic_passwords字段中提供，格式：{"设备UUID": "密码"}
+      - **区域级密码**: 在region_passwords字段中提供，格式：{"区域UUID": "密码"}（优先级更高）
+    - 区域级密码优先级高于设备级密码，系统会自动根据设备的region_id查找对应密码
+
+    **使用示例**:
+    ```json
+    {
+        "device_ids": ["device-uuid-1", "device-uuid-2"],
+        "command": "show version",
+        "region_passwords": {
+            "region-uuid-1": "区域密码"
+        },
+        "enable_parsing": false,
+        "timeout": 30
+    }
+    ```
 
     **注意事项**:
     - 请谨慎使用，避免执行危险命令

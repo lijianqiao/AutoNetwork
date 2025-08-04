@@ -61,20 +61,36 @@ class NetworkQueryService:
                 f"查询类型: {request.query_type}，设备数量: {len(request.device_ids)}"
             )
 
-            # 根据查询类型分发到相应的处理方法
-            result = await self._dispatch_query(request, operation_context)
+            # 如果提供了动态密码，设置到认证管理器的缓存中
+            auth_manager = self.connection_service.auth_manager
+            if request.dynamic_passwords:
+                auth_manager.set_dynamic_passwords(request.dynamic_passwords)
+                logger.info(f"设置了 {len(request.dynamic_passwords)} 个设备的动态密码")
 
-            execution_time = time.time() - start_time
+            if request.region_passwords:
+                auth_manager.set_region_dynamic_passwords(request.region_passwords)
+                logger.info(f"设置了 {len(request.region_passwords)} 个区域的动态密码")
+            try:
+                # 根据查询类型分发到相应的处理方法
+                result = await self._dispatch_query(request, operation_context)
 
-            # 构建统一响应
-            return UnifiedQueryResponse(
-                query_id=query_id,
-                query_type=request.query_type,
-                device_results=result.get("device_results", []),
-                summary=result.get("summary", {}),
-                execution_time=execution_time,
-                created_at=datetime.now().isoformat(),
-            )
+                execution_time = time.time() - start_time
+
+                # 构建统一响应
+                return UnifiedQueryResponse(
+                    query_id=query_id,
+                    query_type=request.query_type,
+                    device_results=result.get("device_results", []),
+                    summary=result.get("summary", {}),
+                    execution_time=execution_time,
+                    created_at=datetime.now().isoformat(),
+                )
+            finally:
+                # 查询完成后清除动态密码缓存（安全考虑）
+                if request.dynamic_passwords or request.region_passwords:
+                    auth_manager = self.connection_service.auth_manager
+                    auth_manager.clear_dynamic_passwords()
+                    logger.info("已清除动态密码缓存")
 
         except BusinessException:
             raise
@@ -245,7 +261,7 @@ class NetworkQueryService:
                         hostname=device.hostname,
                         ip_address=device.ip_address,
                         success=command_result["success"],
-                        result_data={"output": command_result["output"]},
+                        result_data={"command": command},
                         raw_output=command_result["output"],
                         error_message=command_result.get("error_message"),
                         execution_time=device_execution_time,

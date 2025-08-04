@@ -43,6 +43,44 @@ class AuthenticationManager(IAuthenticationProvider):
 
         # 动态密码输入缓存（仅在会话期间有效）
         self._dynamic_password_cache: dict[str, str] = {}
+        # 区域级动态密码缓存
+        self._region_password_cache: dict[str, str] = {}
+
+    def set_dynamic_passwords(self, dynamic_passwords: dict[UUID, str]) -> None:
+        """批量设置动态密码到缓存中
+
+        Args:
+            dynamic_passwords: 动态密码映射表，键为设备ID，值为对应的动态密码
+        """
+        if not dynamic_passwords:
+            return
+
+        for device_id, password in dynamic_passwords.items():
+            cache_key = f"{device_id}_"  # 后面会在获取设备信息时完善主机名
+            self._dynamic_password_cache[cache_key] = password
+            logger.debug(f"设置设备 {device_id} 的动态密码到缓存")
+
+    def set_region_dynamic_passwords(self, region_passwords: dict[UUID, str]) -> None:
+        """设置区域级动态密码（基于区域ID）
+
+        Args:
+            region_passwords: 区域密码映射表，键为区域ID（UUID），值为对应的动态密码
+        """
+        if not region_passwords:
+            return
+
+        # 将UUID键转换为字符串存储
+        for region_id, password in region_passwords.items():
+            self._region_password_cache[str(region_id)] = password
+
+        for region_id, _ in region_passwords.items():
+            logger.debug(f"设置区域 {region_id} 的动态密码到缓存")
+
+    def clear_dynamic_passwords(self) -> None:
+        """清除所有动态密码缓存"""
+        self._dynamic_password_cache.clear()
+        self._region_password_cache.clear()
+        logger.debug("已清除所有动态密码缓存")
 
     async def get_device_credentials(self, device_id: UUID, dynamic_password: str | None = None) -> DeviceCredentials:
         """获取设备认证凭据
@@ -110,16 +148,34 @@ class AuthenticationManager(IAuthenticationProvider):
 
         # 检查是否提供了动态密码
         if not dynamic_password:
-            # 尝试从缓存中获取（仅在同一会话中有效）
-            cache_key = f"{device.id}_{device.hostname}"
-            cached_password = self._dynamic_password_cache.get(cache_key)
-            if not cached_password:
-                raise DynamicPasswordRequiredException(
-                    device_info=f"{device.hostname}({device.ip_address})",
-                    device_id=str(device.id),
-                    hostname=device.hostname,
-                )
-            dynamic_password = cached_password
+            # 优先检查区域级密码缓存（基于区域ID）
+            region_password = self._region_password_cache.get(str(region.id))
+            if region_password:
+                dynamic_password = region_password
+                logger.debug(f"从区域缓存获取到密码: region_id={region.id}, region_code={region.region_code}")
+            else:
+                # 尝试从设备级缓存中获取（仅在同一会话中有效）
+                # 首先尝试完整的缓存键
+                cache_key = f"{device.id}_{device.hostname}"
+                cached_password = self._dynamic_password_cache.get(cache_key)
+
+                # 如果没有找到，尝试只使用设备ID的缓存键（批量设置时使用）
+                if not cached_password:
+                    cache_key_by_id = f"{device.id}_"
+                    cached_password = self._dynamic_password_cache.get(cache_key_by_id)
+                    if cached_password:
+                        # 将密码重新存储到完整的缓存键中
+                        self._dynamic_password_cache[cache_key] = cached_password
+                        # 移除临时的设备ID缓存键
+                        del self._dynamic_password_cache[cache_key_by_id]
+
+                if not cached_password:
+                    raise DynamicPasswordRequiredException(
+                        device_info=f"{device.hostname}({device.ip_address})",
+                        device_id=str(device.id),
+                        hostname=device.hostname,
+                    )
+                dynamic_password = cached_password
         else:
             # 缓存动态密码（仅在会话期间有效）
             cache_key = f"{device.id}_{device.hostname}"

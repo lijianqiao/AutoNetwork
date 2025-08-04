@@ -159,8 +159,8 @@ class DeviceConnectionService:
                 "device_id": str(device_id),
                 "command": command,
                 "success": result.get("success", False),
-                "output": result.get("output", ""),
-                "elapsed_time": result.get("elapsed_time", 0.0),
+                "output": result.get("response", ""),
+                "elapsed_time": result.get("execution_time", 0.0),
                 "error_message": result.get("error_message"),
                 "executed_at": datetime.now().isoformat(),
             }
